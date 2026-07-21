@@ -1,0 +1,11 @@
+{
+  "name": "crm",
+  "private": true,
+  "scripts": {
+    "build": "npm install --prefix server && npm install --prefix client && npm run build --prefix client",
+    "start": "npm start --prefix server"
+  },
+  "engines": {
+    "node": ">=22.5.0"
+  }
+}
