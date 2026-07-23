@@ -1,6 +1,7 @@
 import React from "react";
 import { NavLink, useNavigate } from "react-router-dom";
 import { useAuth } from "../AuthContext.jsx";
+import Logo from "./Logo.jsx";
 
 export default function Layout({ children }) {
   const { user, logout } = useAuth();
@@ -14,7 +15,7 @@ export default function Layout({ children }) {
   return (
     <div className="app-shell">
       <header className="topbar">
-        <div className="brand">CRM · Lead Tracker</div>
+        <div className="brand"><Logo size={30} textSize={15} /></div>
         <nav>
           <NavLink to="/" end>Dashboard</NavLink>
           <NavLink to="/leads/new">New Lead</NavLink>

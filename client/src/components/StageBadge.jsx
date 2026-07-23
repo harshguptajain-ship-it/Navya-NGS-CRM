@@ -23,8 +23,14 @@ function hashColor(key) {
   return PALETTE[hash % PALETTE.length];
 }
 
+// Exposed so other components (e.g. the dashboard's stat boxes) can match
+// this same per-stage color without duplicating the palette.
+export function colorForIndex(index) {
+  return PALETTE[((index % PALETTE.length) + PALETTE.length) % PALETTE.length];
+}
+
 export default function StageBadge({ stage, label, colorIndex }) {
-  const c = Number.isInteger(colorIndex) ? PALETTE[colorIndex % PALETTE.length] : hashColor(stage || "");
+  const c = Number.isInteger(colorIndex) ? colorForIndex(colorIndex) : hashColor(stage || "");
   return (
     <span className="badge" style={{ background: c.bg, color: c.fg }}>
       {label ?? stage}

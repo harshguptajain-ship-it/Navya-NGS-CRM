@@ -58,7 +58,7 @@ label { font-size: 13px; font-weight: 600; color: #475569; display: block; margi
   background: #111827;
   color: white;
 }
-.topbar .brand { font-weight: 700; font-size: 16px; }
+.topbar .brand { display: flex; align-items: center; }
 .topbar nav { display: flex; gap: 16px; flex: 1; }
 .topbar nav a { padding: 6px 10px; border-radius: 6px; opacity: 0.85; }
 .topbar nav a.active { background: rgba(255,255,255,0.15); opacity: 1; }
@@ -78,7 +78,7 @@ label { font-size: 13px; font-weight: 600; color: #475569; display: block; margi
 
 .login-wrap { display: flex; align-items: center; justify-content: center; height: 100vh; background: #111827; }
 .login-card { background: white; padding: 32px; border-radius: 12px; width: min(340px, 90vw); }
-.login-card h1 { font-size: 20px; margin: 0 0 20px; }
+.login-card h1 { font-size: 18px; margin: 0 0 20px; text-align: center; color: #64748b; font-weight: 600; }
 .login-card .field { margin-bottom: 14px; }
 .login-card button { width: 100%; margin-top: 6px; padding: 10px; }
 .error-text { color: #dc2626; font-size: 13px; margin-top: 8px; }
@@ -151,7 +151,8 @@ tr:hover td { background: #f1f5f9; }
   min-width: 130px;
   background: white;
   border-radius: 10px;
-  padding: 14px 16px;
+  border-top: 3px solid transparent;
+  padding: 12px 16px 14px;
   box-shadow: 0 1px 3px rgba(0,0,0,0.08);
 }
 .stat-box .num { font-size: 22px; font-weight: 700; }

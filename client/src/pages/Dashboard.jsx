@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { api } from "../api";
-import StageBadge from "../components/StageBadge.jsx";
+import StageBadge, { colorForIndex } from "../components/StageBadge.jsx";
 import { useStages } from "../hooks/useStages.js";
 import { useStatuses } from "../hooks/useStatuses.js";
 import { useAuth } from "../AuthContext.jsx";
@@ -146,8 +146,8 @@ export default function Dashboard() {
   return (
     <div>
       <div className="stat-row">
-        {stageOrder.map((s) => (
-          <div className="stat-box" key={s}>
+        {stageOrder.map((s, i) => (
+          <div className="stat-box" key={s} style={{ borderTopColor: colorForIndex(i).fg }}>
             <div className="num">{counts[s]}</div>
             <div className="label">{labelOf(s)}</div>
           </div>
@@ -206,6 +206,7 @@ export default function Dashboard() {
           {isAdmin && (
             <select value={assignedFilter} onChange={(e) => setAssignedFilter(e.target.value)}>
               <option value="">Assigned To (All)</option>
+              <option value="unassigned">Unassigned</option>
               {executives.map((u) => (
                 <option key={u.id} value={u.id}>{u.name}</option>
               ))}
@@ -265,6 +266,7 @@ export default function Dashboard() {
                       <span className="header-filter-wrap">
                         <select className="header-filter" value={assignedFilter} onChange={(e) => setAssignedFilter(e.target.value)}>
                           <option value="">Assigned To</option>
+                          <option value="unassigned">Unassigned</option>
                           {executives.map((u) => (
                             <option key={u.id} value={u.id}>{u.name}</option>
                           ))}

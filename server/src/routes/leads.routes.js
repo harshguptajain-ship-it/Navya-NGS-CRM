@@ -82,7 +82,9 @@ function buildLeadFilters(req) {
     clauses.push("l.status = @status");
     params.status = status;
   }
-  if (assigned_to) {
+  if (assigned_to === "unassigned") {
+    clauses.push("l.assigned_to IS NULL");
+  } else if (assigned_to) {
     clauses.push("l.assigned_to = @assigned_to");
     params.assigned_to = assigned_to;
   }

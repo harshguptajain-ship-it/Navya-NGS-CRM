@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../AuthContext.jsx";
+import Logo from "../components/Logo.jsx";
 
 export default function Login() {
   const { login } = useAuth();
@@ -27,7 +28,10 @@ export default function Login() {
   return (
     <div className="login-wrap">
       <form className="login-card" onSubmit={handleSubmit}>
-        <h1>CRM Login</h1>
+        <div style={{ display: "flex", justifyContent: "center", marginBottom: 20 }}>
+          <Logo size={48} textSize={19} dark />
+        </div>
+        <h1>Sign in</h1>
         <div className="field">
           <label>Email</label>
           <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required autoFocus />
