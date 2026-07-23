@@ -23,6 +23,7 @@ export default function Dashboard() {
   const stageOrder = useMemo(() => stages.map((s) => s.key), [stages]);
   const { statuses, labelOf: statusLabelOf, colorIndexOf: statusColorIndexOf } = useStatuses();
   const [leads, setLeads] = useState([]);
+  const [executives, setExecutives] = useState([]);
   const [stageFilter, setStageFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [assignedFilter, setAssignedFilter] = useState("");
@@ -60,6 +61,10 @@ export default function Dashboard() {
       setLoading(false);
     }
   }
+
+  useEffect(() => {
+    api.listUsers().then((res) => setExecutives(res.users)).catch(() => {});
+  }, []);
 
   useEffect(() => {
     load();
@@ -161,7 +166,8 @@ export default function Dashboard() {
           )}
         </form>
         <p style={{ color: "#64748b", fontSize: 13, marginTop: -8 }}>
-          Tip: click any Stage, Status, Source, Phone, Assigned To, or Handling By value in the table below to filter by it.
+          Tip: use the dropdown in the Stage / Status / Assigned To / Handling By column headers to filter by any value,
+          or click a Phone / Source value in a row to filter by exactly that.
         </p>
 
         {error && <div className="error-text">{error}</div>}
@@ -175,11 +181,59 @@ export default function Dashboard() {
                   <th>Name</th>
                   <th>Phone</th>
                   <th>Source</th>
-                  <th>Stage</th>
-                  <th>Status</th>
+                  <th>
+                    <select
+                      className="header-filter"
+                      value={stageFilter}
+                      onChange={(e) => setStageFilter(e.target.value)}
+                      style={{ color: stageFilter ? "#2563eb" : undefined }}
+                    >
+                      <option value="">Stage (All)</option>
+                      {stageOrder.map((s) => (
+                        <option key={s} value={s}>{labelOf(s)}</option>
+                      ))}
+                    </select>
+                  </th>
+                  <th>
+                    <select
+                      className="header-filter"
+                      value={statusFilter}
+                      onChange={(e) => setStatusFilter(e.target.value)}
+                      style={{ color: statusFilter ? "#2563eb" : undefined }}
+                    >
+                      <option value="">Status (All)</option>
+                      {statuses.map((s) => (
+                        <option key={s.key} value={s.key}>{s.label}</option>
+                      ))}
+                    </select>
+                  </th>
                   <th>Next Follow-up</th>
-                  <th>Assigned To</th>
-                  <th>Handling By</th>
+                  <th>
+                    <select
+                      className="header-filter"
+                      value={assignedFilter}
+                      onChange={(e) => setAssignedFilter(e.target.value)}
+                      style={{ color: assignedFilter ? "#2563eb" : undefined }}
+                    >
+                      <option value="">Assigned To (All)</option>
+                      {executives.map((u) => (
+                        <option key={u.id} value={u.id}>{u.name}</option>
+                      ))}
+                    </select>
+                  </th>
+                  <th>
+                    <select
+                      className="header-filter"
+                      value={handlingFilter}
+                      onChange={(e) => setHandlingFilter(e.target.value)}
+                      style={{ color: handlingFilter ? "#2563eb" : undefined }}
+                    >
+                      <option value="">Handling By (All)</option>
+                      {executives.map((u) => (
+                        <option key={u.id} value={u.id}>{u.name}</option>
+                      ))}
+                    </select>
+                  </th>
                   <th>Last Remark</th>
                   <th>Updated</th>
                 </tr>
