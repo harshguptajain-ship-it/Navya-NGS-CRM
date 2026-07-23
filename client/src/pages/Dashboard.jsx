@@ -3,43 +3,57 @@ import { Link, useNavigate } from "react-router-dom";
 import { api } from "../api";
 import StageBadge from "../components/StageBadge.jsx";
 import { useStages } from "../hooks/useStages.js";
+import { useStatuses } from "../hooks/useStatuses.js";
 import { useAuth } from "../AuthContext.jsx";
-import { formatFollowUp, formatDateTime, followUpDueState } from "../utils/followup.js";
+import { formatFollowUp, formatDateTime } from "../utils/followup.js";
+import { createdRangeFor } from "../utils/dateRange.js";
+
+const CREATED_PRESETS = [
+  { key: "", label: "All time" },
+  { key: "today", label: "Today" },
+  { key: "yesterday", label: "Yesterday" },
+  { key: "week", label: "This week" },
+  { key: "month", label: "This month" },
+];
 
 export default function Dashboard() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const { stages, labelOf, colorIndexOf } = useStages();
   const stageOrder = useMemo(() => stages.map((s) => s.key), [stages]);
+  const { statuses, labelOf: statusLabelOf, colorIndexOf: statusColorIndexOf } = useStatuses();
   const [leads, setLeads] = useState([]);
-  const [upcoming, setUpcoming] = useState([]);
-  const [executives, setExecutives] = useState([]);
-  const [sources, setSources] = useState([]);
   const [stageFilter, setStageFilter] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
   const [assignedFilter, setAssignedFilter] = useState("");
   const [handlingFilter, setHandlingFilter] = useState("");
   const [sourceFilter, setSourceFilter] = useState("");
+  const [createdFilter, setCreatedFilter] = useState("");
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [exporting, setExporting] = useState(false);
 
-  async function load() {
+  function filterParams() {
+    return {
+      stage: stageFilter,
+      status: statusFilter,
+      assigned_to: assignedFilter,
+      handling_by: handlingFilter,
+      source: sourceFilter,
+      q: search,
+      ...createdRangeFor(createdFilter),
+    };
+  }
+
+  // `overrides` lets a click handler (e.g. clicking a phone number) apply a
+  // filter value immediately without waiting for React to re-render state first.
+  async function load(overrides = {}) {
     setLoading(true);
     setError("");
     try {
-      const [leadsRes, upcomingRes] = await Promise.all([
-        api.listLeads({
-          stage: stageFilter,
-          assigned_to: assignedFilter,
-          handling_by: handlingFilter,
-          source: sourceFilter,
-          q: search,
-        }),
-        api.upcomingFollowups(),
-      ]);
-      setLeads(leadsRes.leads);
-      setUpcoming(upcomingRes.followups);
+      const res = await api.listLeads({ ...filterParams(), ...overrides });
+      setLeads(res.leads);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -48,14 +62,9 @@ export default function Dashboard() {
   }
 
   useEffect(() => {
-    api.listUsers().then((res) => setExecutives(res.users)).catch(() => {});
-    api.listSources().then((res) => setSources(res.sources)).catch(() => {});
-  }, []);
-
-  useEffect(() => {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [stageFilter, assignedFilter, handlingFilter, sourceFilter]);
+  }, [stageFilter, statusFilter, assignedFilter, handlingFilter, sourceFilter, createdFilter]);
 
   function handleSearchSubmit(e) {
     e.preventDefault();
@@ -66,18 +75,46 @@ export default function Dashboard() {
     setExporting(true);
     setError("");
     try {
-      await api.exportLeads({
-        stage: stageFilter,
-        assigned_to: assignedFilter,
-        handling_by: handlingFilter,
-        source: sourceFilter,
-        q: search,
-      });
+      await api.exportLeads(filterParams());
     } catch (err) {
       setError(err.message);
     } finally {
       setExporting(false);
     }
+  }
+
+  function clearFilters() {
+    setStageFilter("");
+    setStatusFilter("");
+    setAssignedFilter("");
+    setHandlingFilter("");
+    setSourceFilter("");
+    setCreatedFilter("");
+    setSearch("");
+    load({ stage: "", status: "", assigned_to: "", handling_by: "", source: "", q: "", created_from: "", created_to: "" });
+  }
+
+  const hasActiveFilters =
+    stageFilter || statusFilter || assignedFilter || handlingFilter || sourceFilter || createdFilter || search;
+
+  // Clicking a value inside a row (stage/status badge, source, assigned/handling
+  // name) applies it as a filter directly, same as clicking a stat box —
+  // stopPropagation so it doesn't also navigate to the lead's detail page.
+  function filterClick(setter, value) {
+    return (e) => {
+      e.stopPropagation();
+      setter((prev) => (prev === String(value) ? "" : String(value)));
+    };
+  }
+
+  // Phone doesn't have its own filter state — clicking it just runs it through
+  // the same name/phone/email search the box above uses.
+  function phoneFilterClick(phone) {
+    return (e) => {
+      e.stopPropagation();
+      setSearch(phone);
+      load({ q: phone });
+    };
   }
 
   const counts = useMemo(() => {
@@ -92,9 +129,9 @@ export default function Dashboard() {
       <div className="stat-row">
         {stageOrder.map((s) => (
           <div
-            className="stat-box"
+            className="stat-box clickable"
             key={s}
-            style={{ cursor: "pointer", outline: stageFilter === s ? "2px solid #2563eb" : "none" }}
+            style={{ outline: stageFilter === s ? "2px solid #2563eb" : "none" }}
             onClick={() => setStageFilter(stageFilter === s ? "" : s)}
           >
             <div className="num">{counts[s]}</div>
@@ -103,62 +140,29 @@ export default function Dashboard() {
         ))}
       </div>
 
-      {upcoming.length > 0 && (
-        <div className="card">
-          <h3 style={{ marginTop: 0 }}>Upcoming / Overdue Follow-ups</h3>
-          {upcoming.slice(0, 8).map((f) => {
-            const due = followUpDueState(f.follow_up_date);
-            return (
-              <div className="list-item" key={f.id}>
-                <div className="top-row">
-                  <span className={due.isDue ? "pending" : ""}>
-                    {formatFollowUp(f.follow_up_date)} {due.label ? `(${due.label})` : ""}
-                  </span>
-                  <Link to={`/leads/${f.lead_id}`}>{f.lead_name} ({f.lead_phone})</Link>
-                </div>
-                {f.remarks && <div className="body-text">{f.remarks}</div>}
-              </div>
-            );
-          })}
-        </div>
-      )}
-
       <div className="card">
         <form className="toolbar" onSubmit={handleSearchSubmit}>
-          <select value={stageFilter} onChange={(e) => setStageFilter(e.target.value)}>
-            <option value="">All stages</option>
-            {stageOrder.map((s) => (
-              <option key={s} value={s}>{labelOf(s)}</option>
-            ))}
-          </select>
-          <select value={assignedFilter} onChange={(e) => setAssignedFilter(e.target.value)}>
-            <option value="">All executives (assigned to)</option>
-            {executives.map((u) => (
-              <option key={u.id} value={u.id}>{u.name}</option>
-            ))}
-          </select>
-          <select value={handlingFilter} onChange={(e) => setHandlingFilter(e.target.value)}>
-            <option value="">All executives (handling by)</option>
-            {executives.map((u) => (
-              <option key={u.id} value={u.id}>{u.name}</option>
-            ))}
-          </select>
-          <select value={sourceFilter} onChange={(e) => setSourceFilter(e.target.value)}>
-            <option value="">All sources</option>
-            {sources.map((s) => (
-              <option key={s} value={s}>{s}</option>
+          <select value={createdFilter} onChange={(e) => setCreatedFilter(e.target.value)}>
+            {CREATED_PRESETS.map((p) => (
+              <option key={p.key} value={p.key}>{p.key ? `Created: ${p.label}` : "Created: All time"}</option>
             ))}
           </select>
           <input placeholder="Search name / phone / email" value={search} onChange={(e) => setSearch(e.target.value)} />
           <button type="submit">Search</button>
+          {hasActiveFilters && (
+            <button type="button" className="secondary" onClick={clearFilters}>Clear Filters</button>
+          )}
           <Link to="/leads/new"><button type="button">+ New Lead</button></Link>
           <button type="button" className="secondary" onClick={handleExport} disabled={exporting}>
             {exporting ? "Exporting..." : "Download Excel"}
           </button>
           {user?.role === "admin" && (
-            <Link to="/stages"><button type="button" className="secondary">Manage Stages</button></Link>
+            <Link to="/stages"><button type="button" className="secondary">Manage Stages &amp; Status</button></Link>
           )}
         </form>
+        <p style={{ color: "#64748b", fontSize: 13, marginTop: -8 }}>
+          Tip: click any Stage, Status, Source, Phone, Assigned To, or Handling By value in the table below to filter by it.
+        </p>
 
         {error && <div className="error-text">{error}</div>}
         {loading ? (
@@ -172,6 +176,7 @@ export default function Dashboard() {
                   <th>Phone</th>
                   <th>Source</th>
                   <th>Stage</th>
+                  <th>Status</th>
                   <th>Next Follow-up</th>
                   <th>Assigned To</th>
                   <th>Handling By</th>
@@ -183,18 +188,45 @@ export default function Dashboard() {
                 {leads.map((l) => (
                   <tr key={l.id} onClick={() => navigate(`/leads/${l.id}`)} style={{ cursor: "pointer" }}>
                     <td>{l.name}</td>
-                    <td className="nowrap">{l.phone || "-"}</td>
-                    <td>{l.source || "-"}</td>
-                    <td><StageBadge stage={l.stage} label={labelOf(l.stage)} colorIndex={colorIndexOf(l.stage)} /></td>
+                    <td className="nowrap">
+                      {l.phone ? (
+                        <span className="clickable-cell" onClick={phoneFilterClick(l.phone)}>{l.phone}</span>
+                      ) : "-"}
+                    </td>
+                    <td>
+                      {l.source ? (
+                        <span className="clickable-cell" onClick={filterClick(setSourceFilter, l.source)}>{l.source}</span>
+                      ) : "-"}
+                    </td>
+                    <td>
+                      <span className="badge-clickable" onClick={filterClick(setStageFilter, l.stage)}>
+                        <StageBadge stage={l.stage} label={labelOf(l.stage)} colorIndex={colorIndexOf(l.stage)} />
+                      </span>
+                    </td>
+                    <td>
+                      {l.status ? (
+                        <span className="badge-clickable" onClick={filterClick(setStatusFilter, l.status)}>
+                          <StageBadge stage={l.status} label={statusLabelOf(l.status)} colorIndex={statusColorIndexOf(l.status)} />
+                        </span>
+                      ) : "-"}
+                    </td>
                     <td className="nowrap">{formatFollowUp(l.next_follow_up_date)}</td>
-                    <td>{l.assigned_to_name || "Unassigned"}</td>
-                    <td>{l.handling_by_name || "-"}</td>
+                    <td>
+                      {l.assigned_to ? (
+                        <span className="clickable-cell" onClick={filterClick(setAssignedFilter, l.assigned_to)}>{l.assigned_to_name}</span>
+                      ) : "Unassigned"}
+                    </td>
+                    <td>
+                      {l.handling_by ? (
+                        <span className="clickable-cell" onClick={filterClick(setHandlingFilter, l.handling_by)}>{l.handling_by_name}</span>
+                      ) : "-"}
+                    </td>
                     <td className="remark-cell" title={l.last_remark || ""}>{l.last_remark || "-"}</td>
                     <td className="nowrap">{formatDateTime(l.updated_at)}</td>
                   </tr>
                 ))}
                 {leads.length === 0 && (
-                  <tr><td colSpan={9} style={{ textAlign: "center", color: "#64748b" }}>No leads found</td></tr>
+                  <tr><td colSpan={10} style={{ textAlign: "center", color: "#64748b" }}>No leads found</td></tr>
                 )}
               </tbody>
             </table>

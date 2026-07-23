@@ -4,6 +4,7 @@ const path = require("path");
 const db = require("../db");
 const { requireAuth, requireAdmin } = require("../middleware/auth");
 const stages = require("../utils/stages");
+const statuses = require("../utils/statuses");
 
 const router = express.Router();
 
@@ -42,6 +43,44 @@ router.delete("/stages/:key", requireAuth, requireAdmin, (req, res) => {
     res.status(204).end();
   } catch (err) {
     res.status(err.message === "Stage not found" ? 404 : 400).json({ error: err.message });
+  }
+});
+
+// Status management: add/rename/delete/reorder a lead's interest/outcome
+// status (separate from stage) — same shape as stage management above.
+router.post("/statuses", requireAuth, requireAdmin, (req, res) => {
+  try {
+    const status = statuses.createStatus(req.body.label);
+    res.status(201).json({ status });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+router.put("/statuses/reorder", requireAuth, requireAdmin, (req, res) => {
+  try {
+    statuses.reorderStatuses(req.body.order);
+    res.json({ statuses: statuses.getStatuses() });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+router.put("/statuses/:key", requireAuth, requireAdmin, (req, res) => {
+  try {
+    const status = statuses.renameStatus(req.params.key, req.body.label);
+    res.json({ status });
+  } catch (err) {
+    res.status(err.message === "Status not found" ? 404 : 400).json({ error: err.message });
+  }
+});
+
+router.delete("/statuses/:key", requireAuth, requireAdmin, (req, res) => {
+  try {
+    statuses.deleteStatus(req.params.key);
+    res.status(204).end();
+  } catch (err) {
+    res.status(err.message === "Status not found" ? 404 : 400).json({ error: err.message });
   }
 });
 

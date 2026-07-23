@@ -19,7 +19,7 @@ export default function Layout({ children }) {
           <NavLink to="/" end>Dashboard</NavLink>
           <NavLink to="/leads/new">New Lead</NavLink>
           {user?.role === "admin" && <NavLink to="/users">Executives</NavLink>}
-          {user?.role === "admin" && <NavLink to="/stages">Stages</NavLink>}
+          {user?.role === "admin" && <NavLink to="/stages">Stages &amp; Status</NavLink>}
         </nav>
         <div className="user-box">
           <span>{user?.name} <em>({user?.role})</em></span>

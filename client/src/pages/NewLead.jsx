@@ -1,9 +1,11 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../api";
+import { useStatuses } from "../hooks/useStatuses.js";
 
 export default function NewLead() {
   const navigate = useNavigate();
+  const { statuses } = useStatuses();
   const [form, setForm] = useState({
     name: "",
     phone: "",
@@ -11,6 +13,7 @@ export default function NewLead() {
     address: "",
     source: "",
     notes: "",
+    status: "",
     assigned_to: "",
     handling_by: "",
   });
@@ -65,6 +68,15 @@ export default function NewLead() {
           <div>
             <label>Lead Source</label>
             <input placeholder="Referral, Walk-in, Website..." value={form.source} onChange={(e) => update("source", e.target.value)} />
+          </div>
+          <div>
+            <label>Status</label>
+            <select value={form.status} onChange={(e) => update("status", e.target.value)}>
+              <option value="">Not set</option>
+              {statuses.map((s) => (
+                <option key={s.key} value={s.key}>{s.label}</option>
+              ))}
+            </select>
           </div>
           <div>
             <label>Assign To</label>

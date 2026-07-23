@@ -1,8 +1,9 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { api } from "../api";
 import StageBadge from "../components/StageBadge.jsx";
 import { useStages } from "../hooks/useStages.js";
+import { useStatuses } from "../hooks/useStatuses.js";
 import { formatFollowUp, followUpDueState } from "../utils/followup.js";
 import { useAuth } from "../AuthContext.jsx";
 
@@ -11,6 +12,7 @@ export default function LeadDetail() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const { stages, labelOf, colorIndexOf } = useStages();
+  const { statuses } = useStatuses();
   const stageOrder = stages.map((s) => s.key);
   const [lead, setLead] = useState(null);
   const [followups, setFollowups] = useState([]);
@@ -18,9 +20,29 @@ export default function LeadDetail() {
   const [stageHistory, setStageHistory] = useState([]);
   const [remarks, setRemarks] = useState([]);
   const [executives, setExecutives] = useState([]);
-  const [tab, setTab] = useState("followups");
+  const [tab, setTab] = useState("notes");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
+
+  // Every remark-like note about this lead — from the Remarks tab, a follow-up's
+  // note, a call's logged response, or a stage-change note — merged into one
+  // reverse-chronological view so nothing gets missed by only checking one tab.
+  const allNotes = useMemo(() => {
+    const items = [];
+    remarks.forEach((r) =>
+      items.push({ id: `remark-${r.id}`, type: "Remark", ts: r.created_at, by: r.created_by_name, text: r.remark_text })
+    );
+    followups.forEach((f) => {
+      if (f.remarks) items.push({ id: `followup-${f.id}`, type: "Follow-up", ts: f.created_at, by: f.created_by_name, text: f.remarks });
+    });
+    calls.forEach((c) => {
+      if (c.customer_response) items.push({ id: `call-${c.id}`, type: "Call", ts: c.call_date, by: c.executive_name, text: c.customer_response });
+    });
+    stageHistory.forEach((h) => {
+      if (h.remarks) items.push({ id: `stage-${h.id}`, type: "Stage Change", ts: h.changed_at, by: h.changed_by_name, text: h.remarks });
+    });
+    return items.sort((a, b) => (a.ts < b.ts ? 1 : a.ts > b.ts ? -1 : 0));
+  }, [remarks, followups, calls, stageHistory]);
 
   async function load() {
     setLoading(true);
@@ -119,6 +141,19 @@ export default function LeadDetail() {
                   ))}
                 </select>
               </span>
+              <span>
+                Status{" "}
+                <select
+                  value={lead.status || ""}
+                  onChange={(e) => handleAssignmentChange("status", e.target.value)}
+                  style={{ width: "auto", display: "inline-block" }}
+                >
+                  <option value="">Not set</option>
+                  {statuses.map((s) => (
+                    <option key={s.key} value={s.key}>{s.label}</option>
+                  ))}
+                </select>
+              </span>
             </div>
             <div className="meta-line">Created {lead.created_at} by {lead.created_by_name || "-"} · Last updated {lead.updated_at}</div>
           </div>
@@ -149,6 +184,9 @@ export default function LeadDetail() {
 
       <div className="card">
         <div className="tabs">
+          <button className={tab === "notes" ? "active" : ""} onClick={() => setTab("notes")}>
+            All Notes ({allNotes.length})
+          </button>
           <button className={tab === "followups" ? "active" : ""} onClick={() => setTab("followups")}>
             Follow-ups ({followups.length})
           </button>
@@ -163,6 +201,7 @@ export default function LeadDetail() {
           </button>
         </div>
 
+        {tab === "notes" && <AllNotesPanel notes={allNotes} />}
         {tab === "followups" && (
           <FollowupsPanel leadId={id} followups={followups} onChange={load} />
         )}
@@ -170,6 +209,23 @@ export default function LeadDetail() {
         {tab === "remarks" && <RemarksPanel leadId={id} remarks={remarks} onChange={load} />}
         {tab === "history" && <HistoryPanel history={stageHistory} labelOf={labelOf} />}
       </div>
+    </div>
+  );
+}
+
+function AllNotesPanel({ notes }) {
+  return (
+    <div>
+      {notes.map((n) => (
+        <div className="list-item" key={n.id}>
+          <div className="top-row">
+            <span><strong>{n.type}</strong> · {n.ts}</span>
+            <span>{n.by}</span>
+          </div>
+          <div className="body-text">{n.text}</div>
+        </div>
+      ))}
+      {notes.length === 0 && <p style={{ color: "#64748b" }}>No remarks, follow-up notes, or call notes yet.</p>}
     </div>
   );
 }

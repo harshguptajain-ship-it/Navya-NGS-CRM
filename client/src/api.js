@@ -45,6 +45,13 @@ export const api = {
   renameStage: (key, payload) => request(`/admin/stages/${key}`, { method: "PUT", body: JSON.stringify(payload) }),
   deleteStage: (key) => request(`/admin/stages/${key}`, { method: "DELETE" }),
   reorderStages: (order) => request("/admin/stages/reorder", { method: "PUT", body: JSON.stringify({ order }) }),
+
+  statuses: () => request("/leads/statuses"),
+  createStatus: (payload) => request("/admin/statuses", { method: "POST", body: JSON.stringify(payload) }),
+  renameStatus: (key, payload) => request(`/admin/statuses/${key}`, { method: "PUT", body: JSON.stringify(payload) }),
+  deleteStatus: (key) => request(`/admin/statuses/${key}`, { method: "DELETE" }),
+  reorderStatuses: (order) => request("/admin/statuses/reorder", { method: "PUT", body: JSON.stringify({ order }) }),
+
   listSources: () => request("/leads/sources"),
   listLeads: (params = {}) => {
     const qs = new URLSearchParams(Object.entries(params).filter(([, v]) => v)).toString();

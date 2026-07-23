@@ -31,6 +31,7 @@ CREATE TABLE IF NOT EXISTS leads (
   notes TEXT,
   stage TEXT NOT NULL DEFAULT 'new',
   stage_updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  status TEXT,
   assigned_to INTEGER REFERENCES users(id),
   created_by INTEGER REFERENCES users(id),
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
@@ -81,6 +82,14 @@ CREATE TABLE IF NOT EXISTS stages (
   sort_order INTEGER NOT NULL DEFAULT 0
 );
 
+-- Separate from "stage" (pipeline position): a lead's interest/outcome status
+-- (Interested, Not Interested, ...), admin-managed the same way stages are.
+CREATE TABLE IF NOT EXISTS statuses (
+  key TEXT PRIMARY KEY,
+  label TEXT NOT NULL,
+  sort_order INTEGER NOT NULL DEFAULT 0
+);
+
 CREATE INDEX IF NOT EXISTS idx_leads_stage ON leads(stage);
 CREATE INDEX IF NOT EXISTS idx_followups_lead ON followups(lead_id);
 CREATE INDEX IF NOT EXISTS idx_followups_date ON followups(follow_up_date);
@@ -94,6 +103,10 @@ const leadColumns = db.prepare("PRAGMA table_info(leads)").all().map((c) => c.na
 if (!leadColumns.includes("handling_by")) {
   db.exec("ALTER TABLE leads ADD COLUMN handling_by INTEGER REFERENCES users(id)");
 }
+if (!leadColumns.includes("status")) {
+  db.exec("ALTER TABLE leads ADD COLUMN status TEXT");
+}
+db.exec("CREATE INDEX IF NOT EXISTS idx_leads_status ON leads(status)");
 
 // Seed the stages table from the original hardcoded lifecycle, once, so
 // existing deployments keep the same stages/order they already had.
@@ -110,6 +123,17 @@ if (stageCount === 0) {
   ];
   const insertStage = db.prepare("INSERT INTO stages (key, label, sort_order) VALUES (?, ?, ?)");
   DEFAULT_STAGES.forEach((s, i) => insertStage.run(s.key, s.label, i));
+}
+
+// Seed a starting set of statuses — admin can add/rename/remove more from the Stages page.
+const statusCount = db.prepare("SELECT COUNT(*) AS c FROM statuses").get().c;
+if (statusCount === 0) {
+  const DEFAULT_STATUSES = [
+    { key: "interested", label: "Interested" },
+    { key: "not_interested", label: "Not Interested" },
+  ];
+  const insertStatus = db.prepare("INSERT INTO statuses (key, label, sort_order) VALUES (?, ?, ?)");
+  DEFAULT_STATUSES.forEach((s, i) => insertStatus.run(s.key, s.label, i));
 }
 
 // Enforce unique phone numbers (blank/NULL phones are exempt so they don't collide).

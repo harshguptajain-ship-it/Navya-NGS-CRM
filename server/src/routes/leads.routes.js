@@ -4,13 +4,63 @@ const db = require("../db");
 const { requireAuth, requireAdmin } = require("../middleware/auth");
 const { requireLeadAccess, visibilityFilter } = require("../middleware/leadAccess");
 const { getStages, isValidStage } = require("../utils/stages");
+const { getStatuses, isValidStatus } = require("../utils/statuses");
 
 const router = express.Router();
 
-// Stages can change at runtime (admin add/rename/delete), so labels are looked
-// up fresh per-request rather than cached at module load.
+// Stages/statuses can change at runtime (admin add/rename/delete), so labels
+// are looked up fresh per-request rather than cached at module load.
 function stageLabels() {
   return Object.fromEntries(getStages().map((s) => [s.key, s.label]));
+}
+function statusLabels() {
+  return Object.fromEntries(getStatuses().map((s) => [s.key, s.label]));
+}
+
+// Shared by the list view and the export — same filters, same visibility rule.
+// created_from/created_to are full "YYYY-MM-DD HH:MM:SS" UTC bounds (the client
+// converts its local-time date range to UTC before sending, to match how
+// created_at is stored).
+function buildLeadFilters(req) {
+  const { stage, status, assigned_to, handling_by, source, q, created_from, created_to } = req.query;
+  const vis = visibilityFilter(req.user);
+  const clauses = [vis.clause];
+  const params = { ...vis.params };
+
+  if (stage) {
+    clauses.push("l.stage = @stage");
+    params.stage = stage;
+  }
+  if (status) {
+    clauses.push("l.status = @status");
+    params.status = status;
+  }
+  if (assigned_to) {
+    clauses.push("l.assigned_to = @assigned_to");
+    params.assigned_to = assigned_to;
+  }
+  if (handling_by) {
+    clauses.push("l.handling_by = @handling_by");
+    params.handling_by = handling_by;
+  }
+  if (source) {
+    clauses.push("LOWER(l.source) = LOWER(@source)");
+    params.source = source;
+  }
+  if (q) {
+    clauses.push("(l.name LIKE @q OR l.phone LIKE @q OR l.email LIKE @q)");
+    params.q = `%${q}%`;
+  }
+  if (created_from) {
+    clauses.push("l.created_at >= @created_from");
+    params.created_from = created_from;
+  }
+  if (created_to) {
+    clauses.push("l.created_at < @created_to");
+    params.created_to = created_to;
+  }
+
+  return { where: `WHERE ${clauses.join(" AND ")}`, params };
 }
 
 // Leads with a pending follow-up first (soonest due date on top), then leads
@@ -59,6 +109,10 @@ router.get("/stages", requireAuth, (req, res) => {
   res.json({ stages: getStages() });
 });
 
+router.get("/statuses", requireAuth, (req, res) => {
+  res.json({ statuses: getStatuses() });
+});
+
 // Distinct, non-empty source values currently in use — powers the Source filter dropdown.
 // Grouped case-insensitively so "Telecaller" and "telecaller" show as one option.
 // Scoped to leads the requesting user can actually see, same as everything else here.
@@ -73,69 +127,18 @@ router.get("/sources", requireAuth, (req, res) => {
   res.json({ sources: rows.map((r) => r.source) });
 });
 
-// List leads, optionally filtered by stage / assigned_to / handling_by / source / search text.
-// Executives only ever see leads they created, or are assigned/handling — admins see everything.
+// List leads, optionally filtered by stage / status / assigned_to / handling_by /
+// source / search text / created-date range. Executives only ever see leads they
+// created, or are assigned/handling — admins see everything.
 router.get("/", requireAuth, (req, res) => {
-  const { stage, assigned_to, handling_by, source, q } = req.query;
-  const vis = visibilityFilter(req.user);
-  const clauses = [vis.clause];
-  const params = { ...vis.params };
-
-  if (stage) {
-    clauses.push("l.stage = @stage");
-    params.stage = stage;
-  }
-  if (assigned_to) {
-    clauses.push("l.assigned_to = @assigned_to");
-    params.assigned_to = assigned_to;
-  }
-  if (handling_by) {
-    clauses.push("l.handling_by = @handling_by");
-    params.handling_by = handling_by;
-  }
-  if (source) {
-    clauses.push("LOWER(l.source) = LOWER(@source)");
-    params.source = source;
-  }
-  if (q) {
-    clauses.push("(l.name LIKE @q OR l.phone LIKE @q OR l.email LIKE @q)");
-    params.q = `%${q}%`;
-  }
-
-  const where = `WHERE ${clauses.join(" AND ")}`;
+  const { where, params } = buildLeadFilters(req);
   const rows = db.prepare(`${LEAD_SELECT} ${where} ${LEAD_ORDER}`).all(params);
   res.json({ leads: rows });
 });
 
 // Export all leads (respecting the same filters + visibility as the list view) as an .xlsx file.
 router.get("/export", requireAuth, async (req, res) => {
-  const { stage, assigned_to, handling_by, source, q } = req.query;
-  const vis = visibilityFilter(req.user);
-  const clauses = [vis.clause];
-  const params = { ...vis.params };
-
-  if (stage) {
-    clauses.push("l.stage = @stage");
-    params.stage = stage;
-  }
-  if (assigned_to) {
-    clauses.push("l.assigned_to = @assigned_to");
-    params.assigned_to = assigned_to;
-  }
-  if (handling_by) {
-    clauses.push("l.handling_by = @handling_by");
-    params.handling_by = handling_by;
-  }
-  if (source) {
-    clauses.push("LOWER(l.source) = LOWER(@source)");
-    params.source = source;
-  }
-  if (q) {
-    clauses.push("(l.name LIKE @q OR l.phone LIKE @q OR l.email LIKE @q)");
-    params.q = `%${q}%`;
-  }
-
-  const where = `WHERE ${clauses.join(" AND ")}`;
+  const { where, params } = buildLeadFilters(req);
   const rows = db.prepare(`${LEAD_SELECT} ${where} ${LEAD_ORDER}`).all(params);
 
   const workbook = new ExcelJS.Workbook();
@@ -149,6 +152,7 @@ router.get("/export", requireAuth, async (req, res) => {
     { header: "Source", key: "source", width: 16 },
     { header: "Stage", key: "stage_label", width: 26 },
     { header: "Stage Updated At", key: "stage_updated_at", width: 20 },
+    { header: "Status", key: "status_label", width: 18 },
     { header: "Assigned To", key: "assigned_to_name", width: 18 },
     { header: "Handling By", key: "handling_by_name", width: 18 },
     { header: "Next Follow-up", key: "next_follow_up_date", width: 16 },
@@ -159,11 +163,16 @@ router.get("/export", requireAuth, async (req, res) => {
     { header: "Updated At", key: "updated_at", width: 20 },
   ];
   sheet.getRow(1).font = { bold: true };
-  sheet.autoFilter = { from: "A1", to: "P1" };
+  sheet.autoFilter = { from: "A1", to: "Q1" };
 
   const labels = stageLabels();
+  const statLabels = statusLabels();
   for (const r of rows) {
-    sheet.addRow({ ...r, stage_label: labels[r.stage] || r.stage });
+    sheet.addRow({
+      ...r,
+      stage_label: labels[r.stage] || r.stage,
+      status_label: r.status ? statLabels[r.status] || r.status : "",
+    });
   }
 
   res.setHeader(
@@ -233,9 +242,12 @@ router.get("/:id", requireAuth, requireLeadAccess("id"), (req, res) => {
 });
 
 router.post("/", requireAuth, (req, res) => {
-  const { name, phone, email, address, source, notes, assigned_to, handling_by } = req.body;
+  const { name, phone, email, address, source, notes, status, assigned_to, handling_by } = req.body;
   if (!name || !name.trim()) {
     return res.status(400).json({ error: "Customer name is required" });
+  }
+  if (status && !isValidStatus(status)) {
+    return res.status(400).json({ error: "Invalid status value" });
   }
 
   const dupe = findLeadByPhone(phone);
@@ -249,8 +261,8 @@ router.post("/", requireAuth, (req, res) => {
   try {
     info = db
       .prepare(
-        `INSERT INTO leads (name, phone, email, address, source, notes, assigned_to, handling_by, created_by)
-         VALUES (@name, @phone, @email, @address, @source, @notes, @assigned_to, @handling_by, @created_by)`
+        `INSERT INTO leads (name, phone, email, address, source, notes, status, assigned_to, handling_by, created_by)
+         VALUES (@name, @phone, @email, @address, @source, @notes, @status, @assigned_to, @handling_by, @created_by)`
       )
       .run({
         name: name.trim(),
@@ -259,6 +271,7 @@ router.post("/", requireAuth, (req, res) => {
         address: address || null,
         source: source || null,
         notes: notes || null,
+        status: status || null,
         assigned_to: assigned_to || null,
         handling_by: handling_by || null,
         created_by: req.user.id,
@@ -282,8 +295,12 @@ router.put("/:id", requireAuth, requireLeadAccess("id"), (req, res) => {
   const existing = db.prepare("SELECT * FROM leads WHERE id = ?").get(req.params.id);
   if (!existing) return res.status(404).json({ error: "Lead not found" });
 
-  const { name, phone, email, address, source, notes, assigned_to, handling_by } = req.body;
+  const { name, phone, email, address, source, notes, status, assigned_to, handling_by } = req.body;
   const nextPhone = phone ?? existing.phone;
+
+  if (status !== undefined && status && !isValidStatus(status)) {
+    return res.status(400).json({ error: "Invalid status value" });
+  }
 
   // Only re-check for duplicates if the phone is actually being changed — partial
   // updates (e.g. just reassigning "Handling By") shouldn't get blocked by a
@@ -302,7 +319,8 @@ router.put("/:id", requireAuth, requireLeadAccess("id"), (req, res) => {
     db.prepare(
       `UPDATE leads SET
         name = @name, phone = @phone, email = @email, address = @address,
-        source = @source, notes = @notes, assigned_to = @assigned_to, handling_by = @handling_by,
+        source = @source, notes = @notes, status = @status,
+        assigned_to = @assigned_to, handling_by = @handling_by,
         updated_at = datetime('now')
        WHERE id = @id`
     ).run({
@@ -313,6 +331,7 @@ router.put("/:id", requireAuth, requireLeadAccess("id"), (req, res) => {
       address: address ?? existing.address,
       source: source ?? existing.source,
       notes: notes ?? existing.notes,
+      status: normalizeId(status, existing.status),
       assigned_to: normalizeId(assigned_to, existing.assigned_to),
       handling_by: normalizeId(handling_by, existing.handling_by),
     });
