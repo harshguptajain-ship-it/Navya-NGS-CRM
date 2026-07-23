@@ -90,6 +90,13 @@ CREATE TABLE IF NOT EXISTS statuses (
   sort_order INTEGER NOT NULL DEFAULT 0
 );
 
+-- Tracks one-off data migrations (backfills, etc.) so they run exactly once
+-- rather than every server start.
+CREATE TABLE IF NOT EXISTS migrations (
+  name TEXT PRIMARY KEY,
+  applied_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 CREATE INDEX IF NOT EXISTS idx_leads_stage ON leads(stage);
 CREATE INDEX IF NOT EXISTS idx_followups_lead ON followups(lead_id);
 CREATE INDEX IF NOT EXISTS idx_followups_date ON followups(follow_up_date);
@@ -134,6 +141,27 @@ if (statusCount === 0) {
   ];
   const insertStatus = db.prepare("INSERT INTO statuses (key, label, sort_order) VALUES (?, ?, ?)");
   DEFAULT_STATUSES.forEach((s, i) => insertStatus.run(s.key, s.label, i));
+}
+
+// One-time backfill: the Remarks tab used to only surface stage-change notes
+// typed into stage_history.remarks; leads.last_remark now reads exclusively
+// from the remarks table, so copy that older text over once so it doesn't
+// silently disappear from "Last Remark" / "All Notes" for existing leads.
+function hasMigration(name) {
+  return !!db.prepare("SELECT 1 FROM migrations WHERE name = ?").get(name);
+}
+const BACKFILL_NAME = "backfill_stage_history_remarks_v1";
+if (!hasMigration(BACKFILL_NAME)) {
+  const rows = db
+    .prepare("SELECT * FROM stage_history WHERE remarks IS NOT NULL AND remarks <> ''")
+    .all();
+  const insert = db.prepare(
+    "INSERT INTO remarks (lead_id, remark_text, created_by, created_at) VALUES (?, ?, ?, ?)"
+  );
+  for (const h of rows) {
+    insert.run(h.lead_id, h.remarks, h.changed_by, h.changed_at);
+  }
+  db.prepare("INSERT INTO migrations (name) VALUES (?)").run(BACKFILL_NAME);
 }
 
 // Enforce unique phone numbers (blank/NULL phones are exempt so they don't collide).

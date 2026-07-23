@@ -21,12 +21,16 @@ export default function LeadDetail() {
   const [remarks, setRemarks] = useState([]);
   const [executives, setExecutives] = useState([]);
   const [tab, setTab] = useState("notes");
+  const [editing, setEditing] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
 
-  // Every remark-like note about this lead — from the Remarks tab, a follow-up's
-  // note, a call's logged response, or a stage-change note — merged into one
+  // Every remark-like note about this lead — from the Remarks tab (which now
+  // also gets an auto-generated entry for every field edit and stage change),
+  // a follow-up's note, or a call's logged response — merged into one
   // reverse-chronological view so nothing gets missed by only checking one tab.
+  // (Stage History entries aren't included here since every one of them now
+  // has an equivalent auto-generated remark, avoiding duplicate entries.)
   const allNotes = useMemo(() => {
     const items = [];
     remarks.forEach((r) =>
@@ -38,11 +42,8 @@ export default function LeadDetail() {
     calls.forEach((c) => {
       if (c.customer_response) items.push({ id: `call-${c.id}`, type: "Call", ts: c.call_date, by: c.executive_name, text: c.customer_response });
     });
-    stageHistory.forEach((h) => {
-      if (h.remarks) items.push({ id: `stage-${h.id}`, type: "Stage Change", ts: h.changed_at, by: h.changed_by_name, text: h.remarks });
-    });
     return items.sort((a, b) => (a.ts < b.ts ? 1 : a.ts > b.ts ? -1 : 0));
-  }, [remarks, followups, calls, stageHistory]);
+  }, [remarks, followups, calls]);
 
   async function load() {
     setLoading(true);
@@ -92,6 +93,12 @@ export default function LeadDetail() {
     }
   }
 
+  async function handleSaveDetails(form) {
+    await api.updateLead(id, form);
+    setEditing(false);
+    await load();
+  }
+
   async function handleDeleteLead() {
     if (!window.confirm("Delete this lead permanently? This cannot be undone.")) return;
     try {
@@ -108,76 +115,87 @@ export default function LeadDetail() {
   return (
     <div>
       <div className="card">
-        <div className="lead-header">
-          <div>
-            <h1>{lead.name}</h1>
-            <div className="meta-line">{lead.phone || "no phone"} · {lead.email || "no email"}</div>
-            <div className="meta-line">{lead.address}</div>
-            <div className="meta-line">Source: {lead.source || "-"}</div>
-            <div className="meta-line" style={{ display: "flex", gap: 16, alignItems: "center", marginTop: 6 }}>
-              <span>
-                Assigned To{" "}
-                <select
-                  value={lead.assigned_to || ""}
-                  onChange={(e) => handleAssignmentChange("assigned_to", e.target.value)}
-                  style={{ width: "auto", display: "inline-block" }}
-                >
-                  <option value="">Unassigned</option>
-                  {executives.map((u) => (
-                    <option key={u.id} value={u.id}>{u.name}</option>
-                  ))}
-                </select>
-              </span>
-              <span>
-                Handling By{" "}
-                <select
-                  value={lead.handling_by || ""}
-                  onChange={(e) => handleAssignmentChange("handling_by", e.target.value)}
-                  style={{ width: "auto", display: "inline-block" }}
-                >
-                  <option value="">Unassigned</option>
-                  {executives.map((u) => (
-                    <option key={u.id} value={u.id}>{u.name}</option>
-                  ))}
-                </select>
-              </span>
-              <span>
-                Status{" "}
-                <select
-                  value={lead.status || ""}
-                  onChange={(e) => handleAssignmentChange("status", e.target.value)}
-                  style={{ width: "auto", display: "inline-block" }}
-                >
-                  <option value="">Not set</option>
-                  {statuses.map((s) => (
-                    <option key={s.key} value={s.key}>{s.label}</option>
-                  ))}
-                </select>
-              </span>
+        {editing ? (
+          <EditLeadForm lead={lead} onSave={handleSaveDetails} onCancel={() => setEditing(false)} />
+        ) : (
+          <div className="lead-header">
+            <div>
+              <h1>{lead.name}</h1>
+              <div className="meta-line">{lead.phone || "no phone"} · {lead.email || "no email"}</div>
+              <div className="meta-line">{lead.address}</div>
+              <div className="meta-line">Source: {lead.source || "-"}</div>
+              <div className="meta-line" style={{ display: "flex", gap: 16, alignItems: "center", marginTop: 6, flexWrap: "wrap" }}>
+                <span>
+                  Assigned To{" "}
+                  <select
+                    value={lead.assigned_to || ""}
+                    onChange={(e) => handleAssignmentChange("assigned_to", e.target.value)}
+                    style={{ width: "auto", display: "inline-block" }}
+                  >
+                    <option value="">Unassigned</option>
+                    {executives.map((u) => (
+                      <option key={u.id} value={u.id}>{u.name}</option>
+                    ))}
+                  </select>
+                </span>
+                <span>
+                  Handling By{" "}
+                  <select
+                    value={lead.handling_by || ""}
+                    onChange={(e) => handleAssignmentChange("handling_by", e.target.value)}
+                    style={{ width: "auto", display: "inline-block" }}
+                  >
+                    <option value="">Unassigned</option>
+                    {executives.map((u) => (
+                      <option key={u.id} value={u.id}>{u.name}</option>
+                    ))}
+                  </select>
+                </span>
+                <span>
+                  Status{" "}
+                  <select
+                    value={lead.status || ""}
+                    onChange={(e) => handleAssignmentChange("status", e.target.value)}
+                    style={{ width: "auto", display: "inline-block" }}
+                  >
+                    <option value="">Not set</option>
+                    {statuses.map((s) => (
+                      <option key={s.key} value={s.key}>{s.label}</option>
+                    ))}
+                  </select>
+                </span>
+              </div>
+              <div className="meta-line">Created {lead.created_at} by {lead.created_by_name || "-"} · Last updated {lead.updated_at}</div>
             </div>
-            <div className="meta-line">Created {lead.created_at} by {lead.created_by_name || "-"} · Last updated {lead.updated_at}</div>
+            <div style={{ textAlign: "right" }}>
+              <StageBadge stage={lead.stage} label={labelOf(lead.stage)} colorIndex={colorIndexOf(lead.stage)} />
+              <div className="meta-line">since {lead.stage_updated_at}</div>
+              <div style={{ display: "flex", gap: 8, marginTop: 8, justifyContent: "flex-end" }}>
+                <button className="secondary" onClick={() => setEditing(true)}>Edit Details</button>
+                {user?.role === "admin" && (
+                  <button className="danger" onClick={handleDeleteLead}>Delete Lead</button>
+                )}
+              </div>
+            </div>
           </div>
-          <div style={{ textAlign: "right" }}>
-            <StageBadge stage={lead.stage} label={labelOf(lead.stage)} colorIndex={colorIndexOf(lead.stage)} />
-            <div className="meta-line">since {lead.stage_updated_at}</div>
-            {user?.role === "admin" && (
-              <button className="danger" style={{ marginTop: 8 }} onClick={handleDeleteLead}>Delete Lead</button>
-            )}
-          </div>
-        </div>
+        )}
 
-        <div className="stage-picker">
-          {stageOrder.map((s) => (
-            <button
-              key={s}
-              className={s === lead.stage ? "current" : ""}
-              onClick={() => handleStageChange(s)}
-            >
-              {labelOf(s)}
-            </button>
-          ))}
-        </div>
-        {lead.notes && <p style={{ marginTop: 14 }}>{lead.notes}</p>}
+        {!editing && (
+          <>
+            <div className="stage-picker">
+              {stageOrder.map((s) => (
+                <button
+                  key={s}
+                  className={s === lead.stage ? "current" : ""}
+                  onClick={() => handleStageChange(s)}
+                >
+                  {labelOf(s)}
+                </button>
+              ))}
+            </div>
+            {lead.notes && <p style={{ marginTop: 14 }}>{lead.notes}</p>}
+          </>
+        )}
       </div>
 
       {error && <div className="error-text">{error}</div>}
@@ -206,10 +224,81 @@ export default function LeadDetail() {
           <FollowupsPanel leadId={id} followups={followups} onChange={load} />
         )}
         {tab === "calls" && <CallsPanel leadId={id} calls={calls} onChange={load} />}
-        {tab === "remarks" && <RemarksPanel leadId={id} remarks={remarks} onChange={load} />}
+        {tab === "remarks" && (
+          <RemarksPanel leadId={id} remarks={remarks} onChange={load} isAdmin={user?.role === "admin"} />
+        )}
         {tab === "history" && <HistoryPanel history={stageHistory} labelOf={labelOf} />}
       </div>
     </div>
+  );
+}
+
+// Saving here always goes through PUT /leads/:id, which auto-generates a
+// remark describing exactly which fields changed and what they changed from/to.
+function EditLeadForm({ lead, onSave, onCancel }) {
+  const [form, setForm] = useState({
+    name: lead.name || "",
+    phone: lead.phone || "",
+    email: lead.email || "",
+    address: lead.address || "",
+    source: lead.source || "",
+    notes: lead.notes || "",
+  });
+  const [error, setError] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+
+  function update(field, value) {
+    setForm((f) => ({ ...f, [field]: value }));
+  }
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    setError("");
+    setSubmitting(true);
+    try {
+      await onSave(form);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <form onSubmit={handleSubmit}>
+      <h2 style={{ marginTop: 0 }}>Edit Lead Details</h2>
+      <div className="form-grid">
+        <div className="full">
+          <label>Customer Name *</label>
+          <input value={form.name} onChange={(e) => update("name", e.target.value)} required autoFocus />
+        </div>
+        <div>
+          <label>Phone</label>
+          <input value={form.phone} onChange={(e) => update("phone", e.target.value)} />
+        </div>
+        <div>
+          <label>Email</label>
+          <input type="email" value={form.email} onChange={(e) => update("email", e.target.value)} />
+        </div>
+        <div className="full">
+          <label>Address</label>
+          <input value={form.address} onChange={(e) => update("address", e.target.value)} />
+        </div>
+        <div>
+          <label>Lead Source</label>
+          <input value={form.source} onChange={(e) => update("source", e.target.value)} />
+        </div>
+        <div className="full">
+          <label>Notes</label>
+          <textarea rows={3} value={form.notes} onChange={(e) => update("notes", e.target.value)} />
+        </div>
+      </div>
+      {error && <div className="error-text">{error}</div>}
+      <div style={{ marginTop: 14, display: "flex", gap: 10 }}>
+        <button type="submit" disabled={submitting}>{submitting ? "Saving..." : "Save Changes"}</button>
+        <button type="button" className="secondary" onClick={onCancel}>Cancel</button>
+      </div>
+    </form>
   );
 }
 
@@ -341,10 +430,13 @@ function CallsPanel({ leadId, calls, onChange }) {
 
 // Every submission adds a brand-new remark row rather than overwriting the last one,
 // so the lead keeps a running, timestamped history of everything noted about it.
-function RemarksPanel({ leadId, remarks, onChange }) {
+// Editing/deleting an existing remark is admin-only — anyone can add one.
+function RemarksPanel({ leadId, remarks, onChange, isAdmin }) {
   const [text, setText] = useState("");
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [editingId, setEditingId] = useState(null);
+  const [editText, setEditText] = useState("");
 
   async function handleAdd(e) {
     e.preventDefault();
@@ -359,6 +451,34 @@ function RemarksPanel({ leadId, remarks, onChange }) {
       setError(err.message);
     } finally {
       setSubmitting(false);
+    }
+  }
+
+  function startEdit(r) {
+    setEditingId(r.id);
+    setEditText(r.remark_text);
+  }
+
+  async function handleSaveEdit(remarkId) {
+    if (!editText.trim()) return;
+    setError("");
+    try {
+      await api.updateRemark(leadId, remarkId, { remark_text: editText.trim() });
+      setEditingId(null);
+      onChange();
+    } catch (err) {
+      setError(err.message);
+    }
+  }
+
+  async function handleDelete(remarkId) {
+    if (!window.confirm("Delete this remark permanently?")) return;
+    setError("");
+    try {
+      await api.deleteRemark(leadId, remarkId);
+      onChange();
+    } catch (err) {
+      setError(err.message);
     }
   }
 
@@ -379,7 +499,23 @@ function RemarksPanel({ leadId, remarks, onChange }) {
             <span>{r.created_at}</span>
             <span>{r.created_by_name}</span>
           </div>
-          <div className="body-text">{r.remark_text}</div>
+          {editingId === r.id ? (
+            <div style={{ display: "flex", gap: 6, marginTop: 4 }}>
+              <input value={editText} onChange={(e) => setEditText(e.target.value)} autoFocus />
+              <button type="button" onClick={() => handleSaveEdit(r.id)}>Save</button>
+              <button type="button" className="secondary" onClick={() => setEditingId(null)}>Cancel</button>
+            </div>
+          ) : (
+            <>
+              <div className="body-text">{r.remark_text}</div>
+              {isAdmin && (
+                <div style={{ marginTop: 6 }}>
+                  <button className="secondary" onClick={() => startEdit(r)}>Edit</button>{" "}
+                  <button className="danger" onClick={() => handleDelete(r.id)}>Delete</button>
+                </div>
+              )}
+            </>
+          )}
         </div>
       ))}
       {remarks.length === 0 && <p style={{ color: "#64748b" }}>No remarks yet.</p>}

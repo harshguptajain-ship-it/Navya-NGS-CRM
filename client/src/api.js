@@ -77,6 +77,10 @@ export const api = {
   listRemarks: (leadId) => request(`/leads/${leadId}/remarks`),
   addRemark: (leadId, payload) =>
     request(`/leads/${leadId}/remarks`, { method: "POST", body: JSON.stringify(payload) }),
+  updateRemark: (leadId, remarkId, payload) =>
+    request(`/leads/${leadId}/remarks/${remarkId}`, { method: "PUT", body: JSON.stringify(payload) }),
+  deleteRemark: (leadId, remarkId) =>
+    request(`/leads/${leadId}/remarks/${remarkId}`, { method: "DELETE" }),
 
   async exportLeads(params = {}) {
     const qs = new URLSearchParams(Object.entries(params).filter(([, v]) => v)).toString();

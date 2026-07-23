@@ -17,6 +17,53 @@ function statusLabels() {
   return Object.fromEntries(getStatuses().map((s) => [s.key, s.label]));
 }
 
+function userName(id) {
+  if (!id) return null;
+  return db.prepare("SELECT name FROM users WHERE id = ?").get(id)?.name || null;
+}
+
+// Builds a human-readable "X changed from A to B" log of every field that
+// actually changed between the lead's prior state and its new (resolved)
+// state, so edits are traceable without the user having to type anything.
+function describeLeadChanges(existing, resolved) {
+  const lines = [];
+  const plainFields = [
+    ["name", "Name"],
+    ["phone", "Phone"],
+    ["email", "Email"],
+    ["address", "Address"],
+    ["source", "Source"],
+    ["notes", "Notes"],
+  ];
+  for (const [field, label] of plainFields) {
+    const oldVal = existing[field] || "-";
+    const newVal = resolved[field] || "-";
+    if (String(oldVal) !== String(newVal)) {
+      lines.push(`${label} changed from "${oldVal}" to "${newVal}"`);
+    }
+  }
+
+  if (String(existing.status || "") !== String(resolved.status || "")) {
+    const labels = statusLabels();
+    const oldVal = existing.status ? labels[existing.status] || existing.status : "Not set";
+    const newVal = resolved.status ? labels[resolved.status] || resolved.status : "Not set";
+    lines.push(`Status changed from "${oldVal}" to "${newVal}"`);
+  }
+  if (String(existing.assigned_to || "") !== String(resolved.assigned_to || "")) {
+    lines.push(`Assigned To changed from "${userName(existing.assigned_to) || "Unassigned"}" to "${userName(resolved.assigned_to) || "Unassigned"}"`);
+  }
+  if (String(existing.handling_by || "") !== String(resolved.handling_by || "")) {
+    lines.push(`Handling By changed from "${userName(existing.handling_by) || "-"}" to "${userName(resolved.handling_by) || "-"}"`);
+  }
+
+  return lines.join("\n");
+}
+
+function addRemark(leadId, text, userId) {
+  if (!text) return;
+  db.prepare("INSERT INTO remarks (lead_id, remark_text, created_by) VALUES (?, ?, ?)").run(leadId, text, userId);
+}
+
 // Shared by the list view and the export — same filters, same visibility rule.
 // created_from/created_to are full "YYYY-MM-DD HH:MM:SS" UTC bounds (the client
 // converts its local-time date range to UTC before sending, to match how
@@ -67,20 +114,18 @@ function buildLeadFilters(req) {
 // with no follow-up at all, most recently created first.
 const LEAD_ORDER = `ORDER BY (next_follow_up_date IS NULL) ASC, next_follow_up_date ASC, l.created_at DESC`;
 
-// "Last remark" is whichever is more recent: a note from the dedicated Remarks
-// tab, or the optional remark typed in when the stage was last changed.
+// "Last remark" is the most recent entry in the remarks table — which now
+// includes an auto-generated note for every field edit and stage change, on
+// top of anything typed directly into the Remarks tab.
 const LEAD_SELECT = `
   SELECT
     l.*,
     u1.name AS assigned_to_name,
     u2.name AS created_by_name,
     u3.name AS handling_by_name,
-    (SELECT MIN(f.follow_up_date) FROM followups f WHERE f.lead_id = l.id AND f.status = 'pending') AS next_follow_up_date,
-    (SELECT text FROM (
-       SELECT remark_text AS text, created_at AS ts FROM remarks WHERE lead_id = l.id
-       UNION ALL
-       SELECT remarks AS text, changed_at AS ts FROM stage_history WHERE lead_id = l.id AND remarks IS NOT NULL AND remarks <> ''
-     ) ORDER BY ts DESC LIMIT 1) AS last_remark
+    (SELECT f.follow_up_date FROM followups f WHERE f.lead_id = l.id AND f.status = 'pending' ORDER BY f.follow_up_date ASC, f.id ASC LIMIT 1) AS next_follow_up_date,
+    (SELECT f.id FROM followups f WHERE f.lead_id = l.id AND f.status = 'pending' ORDER BY f.follow_up_date ASC, f.id ASC LIMIT 1) AS next_follow_up_id,
+    (SELECT remark_text FROM remarks WHERE lead_id = l.id ORDER BY created_at DESC LIMIT 1) AS last_remark
   FROM leads l
   LEFT JOIN users u1 ON u1.id = l.assigned_to
   LEFT JOIN users u2 ON u2.id = l.created_by
@@ -286,6 +331,7 @@ router.post("/", requireAuth, (req, res) => {
   db.prepare(
     "INSERT INTO stage_history (lead_id, old_stage, new_stage, remarks, changed_by) VALUES (?, NULL, 'new', 'Lead created', ?)"
   ).run(info.lastInsertRowid, req.user.id);
+  addRemark(info.lastInsertRowid, "Lead created", req.user.id);
 
   const lead = db.prepare(`${LEAD_SELECT} WHERE l.id = ?`).get(info.lastInsertRowid);
   res.status(201).json({ lead });
@@ -315,6 +361,19 @@ router.put("/:id", requireAuth, requireLeadAccess("id"), (req, res) => {
     }
   }
 
+  const resolved = {
+    id: req.params.id,
+    name: name ?? existing.name,
+    phone: nextPhone,
+    email: email ?? existing.email,
+    address: address ?? existing.address,
+    source: source ?? existing.source,
+    notes: notes ?? existing.notes,
+    status: normalizeId(status, existing.status),
+    assigned_to: normalizeId(assigned_to, existing.assigned_to),
+    handling_by: normalizeId(handling_by, existing.handling_by),
+  };
+
   try {
     db.prepare(
       `UPDATE leads SET
@@ -323,24 +382,15 @@ router.put("/:id", requireAuth, requireLeadAccess("id"), (req, res) => {
         assigned_to = @assigned_to, handling_by = @handling_by,
         updated_at = datetime('now')
        WHERE id = @id`
-    ).run({
-      id: req.params.id,
-      name: name ?? existing.name,
-      phone: nextPhone,
-      email: email ?? existing.email,
-      address: address ?? existing.address,
-      source: source ?? existing.source,
-      notes: notes ?? existing.notes,
-      status: normalizeId(status, existing.status),
-      assigned_to: normalizeId(assigned_to, existing.assigned_to),
-      handling_by: normalizeId(handling_by, existing.handling_by),
-    });
+    ).run(resolved);
   } catch (err) {
     if (String(err.message).includes("UNIQUE")) {
       return res.status(409).json({ error: "A lead with this phone number already exists" });
     }
     throw err;
   }
+
+  addRemark(req.params.id, describeLeadChanges(existing, resolved), req.user.id);
 
   const lead = db.prepare(`${LEAD_SELECT} WHERE l.id = ?`).get(req.params.id);
   res.json({ lead });
@@ -356,6 +406,11 @@ router.put("/:id/stage", requireAuth, requireLeadAccess("id"), (req, res) => {
   const existing = db.prepare("SELECT * FROM leads WHERE id = ?").get(req.params.id);
   if (!existing) return res.status(404).json({ error: "Lead not found" });
 
+  const labels = stageLabels();
+  const oldLabel = labels[existing.stage] || existing.stage;
+  const newLabel = labels[stage] || stage;
+  const autoText = `Stage changed from "${oldLabel}" to "${newLabel}"` + (remarks && remarks.trim() ? ` — ${remarks.trim()}` : "");
+
   db.exec("BEGIN");
   try {
     db.prepare(
@@ -365,6 +420,7 @@ router.put("/:id/stage", requireAuth, requireLeadAccess("id"), (req, res) => {
     db.prepare(
       `INSERT INTO stage_history (lead_id, old_stage, new_stage, remarks, changed_by) VALUES (?, ?, ?, ?, ?)`
     ).run(req.params.id, existing.stage, stage, remarks || null, req.user.id);
+    addRemark(req.params.id, autoText, req.user.id);
     db.exec("COMMIT");
   } catch (err) {
     db.exec("ROLLBACK");

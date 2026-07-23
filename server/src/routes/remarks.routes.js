@@ -1,6 +1,6 @@
 const express = require("express");
 const db = require("../db");
-const { requireAuth } = require("../middleware/auth");
+const { requireAuth, requireAdmin } = require("../middleware/auth");
 const { requireLeadAccess } = require("../middleware/leadAccess");
 
 const router = express.Router({ mergeParams: true });
@@ -40,7 +40,32 @@ router.post("/", (req, res) => {
   res.status(201).json({ remark });
 });
 
-router.delete("/:remarkId", (req, res) => {
+// Editing/deleting an existing remark is admin-only — anyone can add a new
+// one, but the log itself (including auto-generated change entries) is only
+// correctable by an admin, not silently rewritten by whoever's viewing it.
+router.put("/:remarkId", requireAdmin, (req, res) => {
+  const { remark_text } = req.body;
+  if (!remark_text || !remark_text.trim()) {
+    return res.status(400).json({ error: "remark_text is required" });
+  }
+  const existing = db.prepare("SELECT id FROM remarks WHERE id = ? AND lead_id = ?").get(
+    req.params.remarkId,
+    req.params.leadId
+  );
+  if (!existing) return res.status(404).json({ error: "Remark not found" });
+
+  db.prepare("UPDATE remarks SET remark_text = ? WHERE id = ?").run(remark_text.trim(), req.params.remarkId);
+
+  const remark = db
+    .prepare(
+      `SELECT r.*, u.name AS created_by_name FROM remarks r
+       LEFT JOIN users u ON u.id = r.created_by WHERE r.id = ?`
+    )
+    .get(req.params.remarkId);
+  res.json({ remark });
+});
+
+router.delete("/:remarkId", requireAdmin, (req, res) => {
   const existing = db.prepare("SELECT id FROM remarks WHERE id = ? AND lead_id = ?").get(
     req.params.remarkId,
     req.params.leadId

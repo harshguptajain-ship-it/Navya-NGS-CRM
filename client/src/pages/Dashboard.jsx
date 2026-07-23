@@ -88,6 +88,16 @@ export default function Dashboard() {
     }
   }
 
+  async function handleMarkFollowupDone(leadId, followupId, e) {
+    e.stopPropagation();
+    try {
+      await api.updateFollowup(leadId, followupId, { status: "done" });
+      await load();
+    } catch (err) {
+      setError(err.message);
+    }
+  }
+
   function clearFilters() {
     setStageFilter("");
     setStatusFilter("");
@@ -140,12 +150,48 @@ export default function Dashboard() {
           )}
         </form>
 
+        {/* Mirrors the column-header dropdowns below — on a phone the table
+            becomes a stacked card list and those headers aren't visible, so
+            this bar (hidden on desktop) is the only way to filter there. */}
+        <div className="mobile-filters">
+          <select value={stageFilter} onChange={(e) => setStageFilter(e.target.value)}>
+            <option value="">Stage (All)</option>
+            {stageOrder.map((s) => (
+              <option key={s} value={s}>{labelOf(s)}</option>
+            ))}
+          </select>
+          <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
+            <option value="">Status (All)</option>
+            {statuses.map((s) => (
+              <option key={s.key} value={s.key}>{s.label}</option>
+            ))}
+          </select>
+          <select value={sourceFilter} onChange={(e) => setSourceFilter(e.target.value)}>
+            <option value="">Source (All)</option>
+            {sources.map((s) => (
+              <option key={s} value={s}>{s}</option>
+            ))}
+          </select>
+          <select value={assignedFilter} onChange={(e) => setAssignedFilter(e.target.value)}>
+            <option value="">Assigned To (All)</option>
+            {executives.map((u) => (
+              <option key={u.id} value={u.id}>{u.name}</option>
+            ))}
+          </select>
+          <select value={handlingFilter} onChange={(e) => setHandlingFilter(e.target.value)}>
+            <option value="">Handling By (All)</option>
+            {executives.map((u) => (
+              <option key={u.id} value={u.id}>{u.name}</option>
+            ))}
+          </select>
+        </div>
+
         {error && <div className="error-text">{error}</div>}
         {loading ? (
           <p>Loading...</p>
         ) : (
           <div style={{ overflowX: "auto" }}>
-            <table>
+            <table className="responsive-table">
               <thead>
                 <tr>
                   <th>Name</th>
@@ -208,20 +254,33 @@ export default function Dashboard() {
               <tbody>
                 {leads.map((l) => (
                   <tr key={l.id} onClick={() => navigate(`/leads/${l.id}`)} style={{ cursor: "pointer" }}>
-                    <td>{l.name}</td>
-                    <td className="nowrap">{l.phone || "-"}</td>
-                    <td>{l.source || "-"}</td>
-                    <td><StageBadge stage={l.stage} label={labelOf(l.stage)} colorIndex={colorIndexOf(l.stage)} /></td>
-                    <td>
+                    <td data-label="Name">{l.name}</td>
+                    <td className="nowrap" data-label="Phone">{l.phone || "-"}</td>
+                    <td data-label="Source">{l.source || "-"}</td>
+                    <td data-label="Stage"><StageBadge stage={l.stage} label={labelOf(l.stage)} colorIndex={colorIndexOf(l.stage)} /></td>
+                    <td data-label="Status">
                       {l.status ? (
                         <StageBadge stage={l.status} label={statusLabelOf(l.status)} colorIndex={statusColorIndexOf(l.status)} />
                       ) : "-"}
                     </td>
-                    <td className="nowrap">{formatFollowUp(l.next_follow_up_date)}</td>
-                    <td>{l.assigned_to_name || "Unassigned"}</td>
-                    <td>{l.handling_by_name || "-"}</td>
-                    <td className="remark-cell" title={l.last_remark || ""}>{l.last_remark || "-"}</td>
-                    <td className="nowrap">{formatDateTime(l.updated_at)}</td>
+                    <td className="nowrap" data-label="Next Follow-up">
+                      <span className="followup-cell">
+                        {formatFollowUp(l.next_follow_up_date)}
+                        {l.next_follow_up_id && (
+                          <button
+                            type="button"
+                            className="secondary mark-done-btn"
+                            onClick={(e) => handleMarkFollowupDone(l.id, l.next_follow_up_id, e)}
+                          >
+                            Done
+                          </button>
+                        )}
+                      </span>
+                    </td>
+                    <td data-label="Assigned To">{l.assigned_to_name || "Unassigned"}</td>
+                    <td data-label="Handling By">{l.handling_by_name || "-"}</td>
+                    <td className="remark-cell" title={l.last_remark || ""} data-label="Last Remark">{l.last_remark || "-"}</td>
+                    <td className="nowrap" data-label="Updated">{formatDateTime(l.updated_at)}</td>
                   </tr>
                 ))}
                 {leads.length === 0 && (
