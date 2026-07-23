@@ -4,11 +4,13 @@ import { api } from "../api";
 import StageBadge from "../components/StageBadge.jsx";
 import { useStages } from "../hooks/useStages.js";
 import { formatFollowUp, followUpDueState } from "../utils/followup.js";
+import { useAuth } from "../AuthContext.jsx";
 
 export default function LeadDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { stages, labelOf } = useStages();
+  const { user } = useAuth();
+  const { stages, labelOf, colorIndexOf } = useStages();
   const stageOrder = stages.map((s) => s.key);
   const [lead, setLead] = useState(null);
   const [followups, setFollowups] = useState([]);
@@ -121,9 +123,11 @@ export default function LeadDetail() {
             <div className="meta-line">Created {lead.created_at} by {lead.created_by_name || "-"} · Last updated {lead.updated_at}</div>
           </div>
           <div style={{ textAlign: "right" }}>
-            <StageBadge stage={lead.stage} label={labelOf(lead.stage)} />
+            <StageBadge stage={lead.stage} label={labelOf(lead.stage)} colorIndex={colorIndexOf(lead.stage)} />
             <div className="meta-line">since {lead.stage_updated_at}</div>
-            <button className="danger" style={{ marginTop: 8 }} onClick={handleDeleteLead}>Delete Lead</button>
+            {user?.role === "admin" && (
+              <button className="danger" style={{ marginTop: 8 }} onClick={handleDeleteLead}>Delete Lead</button>
+            )}
           </div>
         </div>
 

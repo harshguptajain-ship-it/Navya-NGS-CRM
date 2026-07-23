@@ -45,7 +45,7 @@ label { font-size: 13px; font-weight: 600; color: #475569; display: block; margi
 .user-box { display: flex; align-items: center; gap: 10px; font-size: 13px; }
 .user-box em { opacity: 0.7; font-style: normal; }
 
-.content { padding: 24px; max-width: 1100px; margin: 0 auto; width: 100%; }
+.content { padding: 24px; max-width: 1440px; margin: 0 auto; width: 100%; }
 .center-message { display: flex; align-items: center; justify-content: center; height: 100vh; color: #64748b; }
 
 .card {
@@ -67,9 +67,11 @@ label { font-size: 13px; font-weight: 600; color: #475569; display: block; margi
 .toolbar select, .toolbar input { width: auto; min-width: 160px; }
 
 table { width: 100%; border-collapse: collapse; }
-th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid #e5e7eb; font-size: 14px; }
-th { color: #64748b; font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.03em; }
-tr:hover td { background: #f8fafc; }
+th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid #e5e7eb; font-size: 13.5px; }
+th { color: #64748b; font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; white-space: nowrap; background: #f8fafc; }
+tbody tr:nth-child(even) td { background: #fbfcfd; }
+tr:hover td { background: #f1f5f9; }
+.nowrap { white-space: nowrap; }
 .remark-cell { max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #475569; }
 
 .badge {

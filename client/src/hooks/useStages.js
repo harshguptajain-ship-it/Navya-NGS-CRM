@@ -25,5 +25,12 @@ export function useStages() {
     [stages]
   );
 
-  return { stages, loading, reload, labelOf };
+  // Badge color is based on position in the current stage order, so every
+  // stage visible at once gets a distinct color instead of colliding by chance.
+  const colorIndexOf = useCallback(
+    (key) => Math.max(0, stages.findIndex((s) => s.key === key)),
+    [stages]
+  );
+
+  return { stages, loading, reload, labelOf, colorIndexOf };
 }

@@ -10,6 +10,13 @@ export function localNowString() {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
+// Trims the seconds off a raw "YYYY-MM-DD HH:MM:SS" timestamp (e.g. leads.updated_at)
+// for a more compact display — doesn't reinterpret the timezone it was stored in.
+export function formatDateTime(value) {
+  if (!value) return "-";
+  return value.length > 16 ? value.slice(0, 16) : value;
+}
+
 export function formatFollowUp(value) {
   if (!value) return "-";
   if (value.length <= 10) return value;

@@ -3,11 +3,13 @@ import { Link, useNavigate } from "react-router-dom";
 import { api } from "../api";
 import StageBadge from "../components/StageBadge.jsx";
 import { useStages } from "../hooks/useStages.js";
-import { formatFollowUp, followUpDueState } from "../utils/followup.js";
+import { useAuth } from "../AuthContext.jsx";
+import { formatFollowUp, formatDateTime, followUpDueState } from "../utils/followup.js";
 
 export default function Dashboard() {
   const navigate = useNavigate();
-  const { stages, labelOf } = useStages();
+  const { user } = useAuth();
+  const { stages, labelOf, colorIndexOf } = useStages();
   const stageOrder = useMemo(() => stages.map((s) => s.key), [stages]);
   const [leads, setLeads] = useState([]);
   const [upcoming, setUpcoming] = useState([]);
@@ -153,6 +155,9 @@ export default function Dashboard() {
           <button type="button" className="secondary" onClick={handleExport} disabled={exporting}>
             {exporting ? "Exporting..." : "Download Excel"}
           </button>
+          {user?.role === "admin" && (
+            <Link to="/stages"><button type="button" className="secondary">Manage Stages</button></Link>
+          )}
         </form>
 
         {error && <div className="error-text">{error}</div>}
@@ -178,14 +183,14 @@ export default function Dashboard() {
                 {leads.map((l) => (
                   <tr key={l.id} onClick={() => navigate(`/leads/${l.id}`)} style={{ cursor: "pointer" }}>
                     <td>{l.name}</td>
-                    <td>{l.phone || "-"}</td>
+                    <td className="nowrap">{l.phone || "-"}</td>
                     <td>{l.source || "-"}</td>
-                    <td><StageBadge stage={l.stage} label={labelOf(l.stage)} /></td>
-                    <td>{formatFollowUp(l.next_follow_up_date)}</td>
+                    <td><StageBadge stage={l.stage} label={labelOf(l.stage)} colorIndex={colorIndexOf(l.stage)} /></td>
+                    <td className="nowrap">{formatFollowUp(l.next_follow_up_date)}</td>
                     <td>{l.assigned_to_name || "Unassigned"}</td>
                     <td>{l.handling_by_name || "-"}</td>
                     <td className="remark-cell" title={l.last_remark || ""}>{l.last_remark || "-"}</td>
-                    <td>{l.updated_at}</td>
+                    <td className="nowrap">{formatDateTime(l.updated_at)}</td>
                   </tr>
                 ))}
                 {leads.length === 0 && (
