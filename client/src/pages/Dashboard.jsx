@@ -24,6 +24,7 @@ export default function Dashboard() {
   const { statuses, labelOf: statusLabelOf, colorIndexOf: statusColorIndexOf } = useStatuses();
   const [leads, setLeads] = useState([]);
   const [executives, setExecutives] = useState([]);
+  const [sources, setSources] = useState([]);
   const [stageFilter, setStageFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [assignedFilter, setAssignedFilter] = useState("");
@@ -47,13 +48,11 @@ export default function Dashboard() {
     };
   }
 
-  // `overrides` lets a click handler (e.g. clicking a phone number) apply a
-  // filter value immediately without waiting for React to re-render state first.
-  async function load(overrides = {}) {
+  async function load() {
     setLoading(true);
     setError("");
     try {
-      const res = await api.listLeads({ ...filterParams(), ...overrides });
+      const res = await api.listLeads(filterParams());
       setLeads(res.leads);
     } catch (err) {
       setError(err.message);
@@ -64,6 +63,7 @@ export default function Dashboard() {
 
   useEffect(() => {
     api.listUsers().then((res) => setExecutives(res.users)).catch(() => {});
+    api.listSources().then((res) => setSources(res.sources)).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -96,31 +96,10 @@ export default function Dashboard() {
     setSourceFilter("");
     setCreatedFilter("");
     setSearch("");
-    load({ stage: "", status: "", assigned_to: "", handling_by: "", source: "", q: "", created_from: "", created_to: "" });
   }
 
   const hasActiveFilters =
     stageFilter || statusFilter || assignedFilter || handlingFilter || sourceFilter || createdFilter || search;
-
-  // Clicking a value inside a row (stage/status badge, source, assigned/handling
-  // name) applies it as a filter directly, same as clicking a stat box —
-  // stopPropagation so it doesn't also navigate to the lead's detail page.
-  function filterClick(setter, value) {
-    return (e) => {
-      e.stopPropagation();
-      setter((prev) => (prev === String(value) ? "" : String(value)));
-    };
-  }
-
-  // Phone doesn't have its own filter state — clicking it just runs it through
-  // the same name/phone/email search the box above uses.
-  function phoneFilterClick(phone) {
-    return (e) => {
-      e.stopPropagation();
-      setSearch(phone);
-      load({ q: phone });
-    };
-  }
 
   const counts = useMemo(() => {
     const c = {};
@@ -133,12 +112,7 @@ export default function Dashboard() {
     <div>
       <div className="stat-row">
         {stageOrder.map((s) => (
-          <div
-            className="stat-box clickable"
-            key={s}
-            style={{ outline: stageFilter === s ? "2px solid #2563eb" : "none" }}
-            onClick={() => setStageFilter(stageFilter === s ? "" : s)}
-          >
+          <div className="stat-box" key={s}>
             <div className="num">{counts[s]}</div>
             <div className="label">{labelOf(s)}</div>
           </div>
@@ -165,10 +139,6 @@ export default function Dashboard() {
             <Link to="/stages"><button type="button" className="secondary">Manage Stages &amp; Status</button></Link>
           )}
         </form>
-        <p style={{ color: "#64748b", fontSize: 13, marginTop: -8 }}>
-          Tip: use the dropdown in the Stage / Status / Assigned To / Handling By column headers to filter by any value,
-          or click a Phone / Source value in a row to filter by exactly that.
-        </p>
 
         {error && <div className="error-text">{error}</div>}
         {loading ? (
@@ -180,59 +150,56 @@ export default function Dashboard() {
                 <tr>
                   <th>Name</th>
                   <th>Phone</th>
-                  <th>Source</th>
                   <th>
-                    <select
-                      className="header-filter"
-                      value={stageFilter}
-                      onChange={(e) => setStageFilter(e.target.value)}
-                      style={{ color: stageFilter ? "#2563eb" : undefined }}
-                    >
-                      <option value="">Stage (All)</option>
-                      {stageOrder.map((s) => (
-                        <option key={s} value={s}>{labelOf(s)}</option>
-                      ))}
-                    </select>
+                    <span className="header-filter-wrap">
+                      <select className="header-filter" value={sourceFilter} onChange={(e) => setSourceFilter(e.target.value)}>
+                        <option value="">Source</option>
+                        {sources.map((s) => (
+                          <option key={s} value={s}>{s}</option>
+                        ))}
+                      </select>
+                    </span>
                   </th>
                   <th>
-                    <select
-                      className="header-filter"
-                      value={statusFilter}
-                      onChange={(e) => setStatusFilter(e.target.value)}
-                      style={{ color: statusFilter ? "#2563eb" : undefined }}
-                    >
-                      <option value="">Status (All)</option>
-                      {statuses.map((s) => (
-                        <option key={s.key} value={s.key}>{s.label}</option>
-                      ))}
-                    </select>
+                    <span className="header-filter-wrap">
+                      <select className="header-filter" value={stageFilter} onChange={(e) => setStageFilter(e.target.value)}>
+                        <option value="">Stage</option>
+                        {stageOrder.map((s) => (
+                          <option key={s} value={s}>{labelOf(s)}</option>
+                        ))}
+                      </select>
+                    </span>
+                  </th>
+                  <th>
+                    <span className="header-filter-wrap">
+                      <select className="header-filter" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
+                        <option value="">Status</option>
+                        {statuses.map((s) => (
+                          <option key={s.key} value={s.key}>{s.label}</option>
+                        ))}
+                      </select>
+                    </span>
                   </th>
                   <th>Next Follow-up</th>
                   <th>
-                    <select
-                      className="header-filter"
-                      value={assignedFilter}
-                      onChange={(e) => setAssignedFilter(e.target.value)}
-                      style={{ color: assignedFilter ? "#2563eb" : undefined }}
-                    >
-                      <option value="">Assigned To (All)</option>
-                      {executives.map((u) => (
-                        <option key={u.id} value={u.id}>{u.name}</option>
-                      ))}
-                    </select>
+                    <span className="header-filter-wrap">
+                      <select className="header-filter" value={assignedFilter} onChange={(e) => setAssignedFilter(e.target.value)}>
+                        <option value="">Assigned To</option>
+                        {executives.map((u) => (
+                          <option key={u.id} value={u.id}>{u.name}</option>
+                        ))}
+                      </select>
+                    </span>
                   </th>
                   <th>
-                    <select
-                      className="header-filter"
-                      value={handlingFilter}
-                      onChange={(e) => setHandlingFilter(e.target.value)}
-                      style={{ color: handlingFilter ? "#2563eb" : undefined }}
-                    >
-                      <option value="">Handling By (All)</option>
-                      {executives.map((u) => (
-                        <option key={u.id} value={u.id}>{u.name}</option>
-                      ))}
-                    </select>
+                    <span className="header-filter-wrap">
+                      <select className="header-filter" value={handlingFilter} onChange={(e) => setHandlingFilter(e.target.value)}>
+                        <option value="">Handling By</option>
+                        {executives.map((u) => (
+                          <option key={u.id} value={u.id}>{u.name}</option>
+                        ))}
+                      </select>
+                    </span>
                   </th>
                   <th>Last Remark</th>
                   <th>Updated</th>
@@ -242,39 +209,17 @@ export default function Dashboard() {
                 {leads.map((l) => (
                   <tr key={l.id} onClick={() => navigate(`/leads/${l.id}`)} style={{ cursor: "pointer" }}>
                     <td>{l.name}</td>
-                    <td className="nowrap">
-                      {l.phone ? (
-                        <span className="clickable-cell" onClick={phoneFilterClick(l.phone)}>{l.phone}</span>
-                      ) : "-"}
-                    </td>
-                    <td>
-                      {l.source ? (
-                        <span className="clickable-cell" onClick={filterClick(setSourceFilter, l.source)}>{l.source}</span>
-                      ) : "-"}
-                    </td>
-                    <td>
-                      <span className="badge-clickable" onClick={filterClick(setStageFilter, l.stage)}>
-                        <StageBadge stage={l.stage} label={labelOf(l.stage)} colorIndex={colorIndexOf(l.stage)} />
-                      </span>
-                    </td>
+                    <td className="nowrap">{l.phone || "-"}</td>
+                    <td>{l.source || "-"}</td>
+                    <td><StageBadge stage={l.stage} label={labelOf(l.stage)} colorIndex={colorIndexOf(l.stage)} /></td>
                     <td>
                       {l.status ? (
-                        <span className="badge-clickable" onClick={filterClick(setStatusFilter, l.status)}>
-                          <StageBadge stage={l.status} label={statusLabelOf(l.status)} colorIndex={statusColorIndexOf(l.status)} />
-                        </span>
+                        <StageBadge stage={l.status} label={statusLabelOf(l.status)} colorIndex={statusColorIndexOf(l.status)} />
                       ) : "-"}
                     </td>
                     <td className="nowrap">{formatFollowUp(l.next_follow_up_date)}</td>
-                    <td>
-                      {l.assigned_to ? (
-                        <span className="clickable-cell" onClick={filterClick(setAssignedFilter, l.assigned_to)}>{l.assigned_to_name}</span>
-                      ) : "Unassigned"}
-                    </td>
-                    <td>
-                      {l.handling_by ? (
-                        <span className="clickable-cell" onClick={filterClick(setHandlingFilter, l.handling_by)}>{l.handling_by_name}</span>
-                      ) : "-"}
-                    </td>
+                    <td>{l.assigned_to_name || "Unassigned"}</td>
+                    <td>{l.handling_by_name || "-"}</td>
                     <td className="remark-cell" title={l.last_remark || ""}>{l.last_remark || "-"}</td>
                     <td className="nowrap">{formatDateTime(l.updated_at)}</td>
                   </tr>
