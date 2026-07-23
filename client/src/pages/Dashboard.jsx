@@ -6,7 +6,7 @@ import { useStages } from "../hooks/useStages.js";
 import { useStatuses } from "../hooks/useStatuses.js";
 import { useAuth } from "../AuthContext.jsx";
 import { formatFollowUp, formatDateTime } from "../utils/followup.js";
-import { createdRangeFor } from "../utils/dateRange.js";
+import { createdRangeFor, customRangeFor } from "../utils/dateRange.js";
 
 const CREATED_PRESETS = [
   { key: "", label: "All time" },
@@ -31,10 +31,14 @@ export default function Dashboard() {
   const [handlingFilter, setHandlingFilter] = useState("");
   const [sourceFilter, setSourceFilter] = useState("");
   const [createdFilter, setCreatedFilter] = useState("");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [exporting, setExporting] = useState(false);
+
+  const isAdmin = user?.role === "admin";
 
   function filterParams() {
     return {
@@ -44,8 +48,26 @@ export default function Dashboard() {
       handling_by: handlingFilter,
       source: sourceFilter,
       q: search,
-      ...createdRangeFor(createdFilter),
+      ...(dateFrom || dateTo ? customRangeFor(dateFrom, dateTo) : createdRangeFor(createdFilter)),
     };
+  }
+
+  // A custom From/To range and the quick preset are mutually exclusive —
+  // picking one clears the other so it's always clear which is in effect.
+  function handlePresetChange(value) {
+    setCreatedFilter(value);
+    if (value) {
+      setDateFrom("");
+      setDateTo("");
+    }
+  }
+  function handleDateFromChange(value) {
+    setDateFrom(value);
+    if (value) setCreatedFilter("");
+  }
+  function handleDateToChange(value) {
+    setDateTo(value);
+    if (value) setCreatedFilter("");
   }
 
   async function load() {
@@ -69,7 +91,7 @@ export default function Dashboard() {
   useEffect(() => {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [stageFilter, statusFilter, assignedFilter, handlingFilter, sourceFilter, createdFilter]);
+  }, [stageFilter, statusFilter, assignedFilter, handlingFilter, sourceFilter, createdFilter, dateFrom, dateTo]);
 
   function handleSearchSubmit(e) {
     e.preventDefault();
@@ -105,11 +127,14 @@ export default function Dashboard() {
     setHandlingFilter("");
     setSourceFilter("");
     setCreatedFilter("");
+    setDateFrom("");
+    setDateTo("");
     setSearch("");
   }
 
   const hasActiveFilters =
-    stageFilter || statusFilter || assignedFilter || handlingFilter || sourceFilter || createdFilter || search;
+    stageFilter || statusFilter || assignedFilter || handlingFilter || sourceFilter ||
+    createdFilter || dateFrom || dateTo || search;
 
   const counts = useMemo(() => {
     const c = {};
@@ -131,11 +156,17 @@ export default function Dashboard() {
 
       <div className="card">
         <form className="toolbar" onSubmit={handleSearchSubmit}>
-          <select value={createdFilter} onChange={(e) => setCreatedFilter(e.target.value)}>
+          <select value={createdFilter} onChange={(e) => handlePresetChange(e.target.value)}>
             {CREATED_PRESETS.map((p) => (
               <option key={p.key} value={p.key}>{p.key ? `Created: ${p.label}` : "Created: All time"}</option>
             ))}
           </select>
+          <span className="date-range-field">
+            From <input type="date" value={dateFrom} onChange={(e) => handleDateFromChange(e.target.value)} />
+          </span>
+          <span className="date-range-field">
+            To <input type="date" value={dateTo} onChange={(e) => handleDateToChange(e.target.value)} />
+          </span>
           <input placeholder="Search name / phone / email" value={search} onChange={(e) => setSearch(e.target.value)} />
           <button type="submit">Search</button>
           {hasActiveFilters && (
@@ -172,12 +203,14 @@ export default function Dashboard() {
               <option key={s} value={s}>{s}</option>
             ))}
           </select>
-          <select value={assignedFilter} onChange={(e) => setAssignedFilter(e.target.value)}>
-            <option value="">Assigned To (All)</option>
-            {executives.map((u) => (
-              <option key={u.id} value={u.id}>{u.name}</option>
-            ))}
-          </select>
+          {isAdmin && (
+            <select value={assignedFilter} onChange={(e) => setAssignedFilter(e.target.value)}>
+              <option value="">Assigned To (All)</option>
+              {executives.map((u) => (
+                <option key={u.id} value={u.id}>{u.name}</option>
+              ))}
+            </select>
+          )}
           <select value={handlingFilter} onChange={(e) => setHandlingFilter(e.target.value)}>
             <option value="">Handling By (All)</option>
             {executives.map((u) => (
@@ -228,14 +261,18 @@ export default function Dashboard() {
                   </th>
                   <th>Next Follow-up</th>
                   <th>
-                    <span className="header-filter-wrap">
-                      <select className="header-filter" value={assignedFilter} onChange={(e) => setAssignedFilter(e.target.value)}>
-                        <option value="">Assigned To</option>
-                        {executives.map((u) => (
-                          <option key={u.id} value={u.id}>{u.name}</option>
-                        ))}
-                      </select>
-                    </span>
+                    {isAdmin ? (
+                      <span className="header-filter-wrap">
+                        <select className="header-filter" value={assignedFilter} onChange={(e) => setAssignedFilter(e.target.value)}>
+                          <option value="">Assigned To</option>
+                          {executives.map((u) => (
+                            <option key={u.id} value={u.id}>{u.name}</option>
+                          ))}
+                        </select>
+                      </span>
+                    ) : (
+                      "Assigned To"
+                    )}
                   </th>
                   <th>
                     <span className="header-filter-wrap">

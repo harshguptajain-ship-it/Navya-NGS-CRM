@@ -97,12 +97,25 @@ CREATE TABLE IF NOT EXISTS migrations (
   applied_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+-- Fully separate from "remarks": admin-only notes on a lead. Executives never
+-- see this table's contents (not gated in the UI alone — the API only
+-- exposes it to admins).
+CREATE TABLE IF NOT EXISTS admin_notes (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  lead_id INTEGER NOT NULL REFERENCES leads(id) ON DELETE CASCADE,
+  note_text TEXT NOT NULL,
+  created_by INTEGER REFERENCES users(id),
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 CREATE INDEX IF NOT EXISTS idx_leads_stage ON leads(stage);
 CREATE INDEX IF NOT EXISTS idx_followups_lead ON followups(lead_id);
 CREATE INDEX IF NOT EXISTS idx_followups_date ON followups(follow_up_date);
 CREATE INDEX IF NOT EXISTS idx_calls_lead ON calls(lead_id);
 CREATE INDEX IF NOT EXISTS idx_stage_history_lead ON stage_history(lead_id);
 CREATE INDEX IF NOT EXISTS idx_remarks_lead ON remarks(lead_id);
+CREATE INDEX IF NOT EXISTS idx_admin_notes_lead ON admin_notes(lead_id);
 `);
 
 // --- Migrations for columns added after the initial release ---

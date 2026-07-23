@@ -2,9 +2,12 @@ import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../api";
 import { useStatuses } from "../hooks/useStatuses.js";
+import { useAuth } from "../AuthContext.jsx";
 
 export default function NewLead() {
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const isAdmin = user?.role === "admin";
   const { statuses } = useStatuses();
   const [form, setForm] = useState({
     name: "",
@@ -78,15 +81,17 @@ export default function NewLead() {
               ))}
             </select>
           </div>
-          <div>
-            <label>Assign To</label>
-            <select value={form.assigned_to} onChange={(e) => update("assigned_to", e.target.value)}>
-              <option value="">Unassigned</option>
-              {executives.map((u) => (
-                <option key={u.id} value={u.id}>{u.name}</option>
-              ))}
-            </select>
-          </div>
+          {isAdmin && (
+            <div>
+              <label>Assign To</label>
+              <select value={form.assigned_to} onChange={(e) => update("assigned_to", e.target.value)}>
+                <option value="">Unassigned</option>
+                {executives.map((u) => (
+                  <option key={u.id} value={u.id}>{u.name}</option>
+                ))}
+              </select>
+            </div>
+          )}
           <div>
             <label>Handling By</label>
             <select value={form.handling_by} onChange={(e) => update("handling_by", e.target.value)}>

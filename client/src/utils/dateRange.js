@@ -36,3 +36,18 @@ export function createdRangeFor(preset) {
   }
   return { created_from: "", created_to: "" };
 }
+
+// fromStr/toStr are "YYYY-MM-DD" values straight out of an <input type="date">,
+// interpreted as local calendar dates (the "to" bound is inclusive of that day).
+export function customRangeFor(fromStr, toStr) {
+  const result = {};
+  if (fromStr) {
+    const [y, m, d] = fromStr.split("-").map(Number);
+    result.created_from = toSqlUtc(new Date(y, m - 1, d, 0, 0, 0));
+  }
+  if (toStr) {
+    const [y, m, d] = toStr.split("-").map(Number);
+    result.created_to = toSqlUtc(new Date(y, m - 1, d + 1, 0, 0, 0));
+  }
+  return result;
+}

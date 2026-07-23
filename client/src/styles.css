@@ -27,7 +27,27 @@ input, select, textarea {
   border-radius: 6px;
   width: 100%;
 }
+textarea { line-height: 1.4; }
+.autosize-textarea { resize: vertical; min-height: 38px; }
 label { font-size: 13px; font-weight: 600; color: #475569; display: block; margin-bottom: 4px; }
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 16px;
+}
+.modal-card {
+  background: white;
+  border-radius: 12px;
+  padding: 24px;
+  width: min(480px, 100%);
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.25);
+}
 
 .app-shell { min-height: 100vh; display: flex; flex-direction: column; }
 .topbar {
@@ -65,6 +85,8 @@ label { font-size: 13px; font-weight: 600; color: #475569; display: block; margi
 
 .toolbar { display: flex; gap: 12px; align-items: center; margin-bottom: 16px; flex-wrap: wrap; }
 .toolbar select, .toolbar input { width: auto; min-width: 160px; }
+.date-range-field { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: #64748b; white-space: nowrap; }
+.date-range-field input { min-width: 0; width: auto; }
 
 table { width: 100%; border-collapse: collapse; }
 th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid #e5e7eb; font-size: 13.5px; }

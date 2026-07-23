@@ -302,6 +302,10 @@ router.post("/", requireAuth, (req, res) => {
     });
   }
 
+  // Executives always own the lead they generate — only an admin can hand a
+  // brand-new lead straight to someone else at creation time.
+  const resolvedAssignedTo = req.user.role === "admin" ? assigned_to || null : req.user.id;
+
   let info;
   try {
     info = db
@@ -317,7 +321,7 @@ router.post("/", requireAuth, (req, res) => {
         source: source || null,
         notes: notes || null,
         status: status || null,
-        assigned_to: assigned_to || null,
+        assigned_to: resolvedAssignedTo,
         handling_by: handling_by || null,
         created_by: req.user.id,
       });
@@ -346,6 +350,15 @@ router.put("/:id", requireAuth, requireLeadAccess("id"), (req, res) => {
 
   if (status !== undefined && status && !isValidStatus(status)) {
     return res.status(400).json({ error: "Invalid status value" });
+  }
+
+  // Executives can hand a lead up to an admin (or unassign it) but not sideways
+  // to another executive — only an admin can do a peer-to-peer reassignment.
+  if (req.user.role !== "admin" && assigned_to !== undefined && assigned_to) {
+    const target = db.prepare("SELECT role FROM users WHERE id = ?").get(assigned_to);
+    if (!target || target.role !== "admin") {
+      return res.status(403).json({ error: "You can only reassign a lead to an admin" });
+    }
   }
 
   // Only re-check for duplicates if the phone is actually being changed — partial

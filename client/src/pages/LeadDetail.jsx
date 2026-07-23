@@ -5,12 +5,14 @@ import StageBadge from "../components/StageBadge.jsx";
 import { useStages } from "../hooks/useStages.js";
 import { useStatuses } from "../hooks/useStatuses.js";
 import { formatFollowUp, followUpDueState } from "../utils/followup.js";
+import { submitOnEnter } from "../utils/keyboard.js";
 import { useAuth } from "../AuthContext.jsx";
 
 export default function LeadDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { user } = useAuth();
+  const isAdmin = user?.role === "admin";
   const { stages, labelOf, colorIndexOf } = useStages();
   const { statuses } = useStatuses();
   const stageOrder = stages.map((s) => s.key);
@@ -19,11 +21,17 @@ export default function LeadDetail() {
   const [calls, setCalls] = useState([]);
   const [stageHistory, setStageHistory] = useState([]);
   const [remarks, setRemarks] = useState([]);
+  const [adminNotes, setAdminNotes] = useState([]);
   const [executives, setExecutives] = useState([]);
   const [tab, setTab] = useState("notes");
   const [editing, setEditing] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
+
+  // Executives can hand a lead up to an admin but not sideways to a peer —
+  // this list is what they get to choose from in the Assigned To picker.
+  // Admins keep the full team.
+  const assignableExecutives = isAdmin ? executives : executives.filter((u) => u.role === "admin");
 
   // Every remark-like note about this lead — from the Remarks tab (which now
   // also gets an auto-generated entry for every field edit and stage change),
@@ -62,21 +70,44 @@ export default function LeadDetail() {
     }
   }
 
+  // Admin notes are a completely separate, admin-only endpoint — an executive
+  // never even issues this request, let alone sees a response from it.
+  async function loadAdminNotes() {
+    try {
+      const res = await api.listAdminNotes(id);
+      setAdminNotes(res.notes);
+    } catch (err) {
+      setError(err.message);
+    }
+  }
+
   useEffect(() => {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
   useEffect(() => {
+    if (isAdmin) loadAdminNotes();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id, isAdmin]);
+
+  useEffect(() => {
     api.listUsers().then((res) => setExecutives(res.users)).catch(() => {});
   }, []);
 
-  async function handleStageChange(stage) {
+  const [pendingStage, setPendingStage] = useState(null);
+  const [stageRemarksText, setStageRemarksText] = useState("");
+
+  function openStageChange(stage) {
     if (stage === lead.stage) return;
-    const remarksText = window.prompt(`Move to "${labelOf(stage)}". Optional remarks:`, "");
-    if (remarksText === null) return; // cancelled
+    setPendingStage(stage);
+    setStageRemarksText("");
+  }
+
+  async function confirmStageChange() {
     try {
-      await api.updateStage(id, { stage, remarks: remarksText });
+      await api.updateStage(id, { stage: pendingStage, remarks: stageRemarksText });
+      setPendingStage(null);
       await load();
     } catch (err) {
       setError(err.message);
@@ -133,7 +164,7 @@ export default function LeadDetail() {
                     style={{ width: "auto", display: "inline-block" }}
                   >
                     <option value="">Unassigned</option>
-                    {executives.map((u) => (
+                    {assignableExecutives.map((u) => (
                       <option key={u.id} value={u.id}>{u.name}</option>
                     ))}
                   </select>
@@ -187,7 +218,7 @@ export default function LeadDetail() {
                 <button
                   key={s}
                   className={s === lead.stage ? "current" : ""}
-                  onClick={() => handleStageChange(s)}
+                  onClick={() => openStageChange(s)}
                 >
                   {labelOf(s)}
                 </button>
@@ -197,6 +228,16 @@ export default function LeadDetail() {
           </>
         )}
       </div>
+
+      {pendingStage && (
+        <StageChangeModal
+          stageLabel={labelOf(pendingStage)}
+          text={stageRemarksText}
+          onTextChange={setStageRemarksText}
+          onConfirm={confirmStageChange}
+          onCancel={() => setPendingStage(null)}
+        />
+      )}
 
       {error && <div className="error-text">{error}</div>}
 
@@ -217,6 +258,11 @@ export default function LeadDetail() {
           <button className={tab === "history" ? "active" : ""} onClick={() => setTab("history")}>
             Stage History ({stageHistory.length})
           </button>
+          {isAdmin && (
+            <button className={tab === "adminNotes" ? "active" : ""} onClick={() => setTab("adminNotes")}>
+              Admin Notes ({adminNotes.length})
+            </button>
+          )}
         </div>
 
         {tab === "notes" && <AllNotesPanel notes={allNotes} />}
@@ -225,9 +271,12 @@ export default function LeadDetail() {
         )}
         {tab === "calls" && <CallsPanel leadId={id} calls={calls} onChange={load} />}
         {tab === "remarks" && (
-          <RemarksPanel leadId={id} remarks={remarks} onChange={load} isAdmin={user?.role === "admin"} />
+          <RemarksPanel leadId={id} remarks={remarks} onChange={load} isAdmin={isAdmin} />
         )}
         {tab === "history" && <HistoryPanel history={stageHistory} labelOf={labelOf} />}
+        {tab === "adminNotes" && isAdmin && (
+          <AdminNotesPanel leadId={id} notes={adminNotes} onChange={loadAdminNotes} />
+        )}
       </div>
     </div>
   );
@@ -302,6 +351,29 @@ function EditLeadForm({ lead, onSave, onCancel }) {
   );
 }
 
+function StageChangeModal({ stageLabel, text, onTextChange, onConfirm, onCancel }) {
+  return (
+    <div className="modal-overlay" onClick={onCancel}>
+      <div className="modal-card" onClick={(e) => e.stopPropagation()}>
+        <h3 style={{ marginTop: 0 }}>Move to &quot;{stageLabel}&quot;</h3>
+        <label>Optional remarks</label>
+        <textarea
+          rows={4}
+          autoFocus
+          value={text}
+          onChange={(e) => onTextChange(e.target.value)}
+          onKeyDown={submitOnEnter(onConfirm)}
+          placeholder="What's the update? (Shift+Enter for a new line)"
+        />
+        <div style={{ marginTop: 14, display: "flex", gap: 10 }}>
+          <button type="button" onClick={onConfirm}>Confirm</button>
+          <button type="button" className="secondary" onClick={onCancel}>Cancel</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function AllNotesPanel({ notes }) {
   return (
     <div>
@@ -325,7 +397,7 @@ function FollowupsPanel({ leadId, followups, onChange }) {
   const [error, setError] = useState("");
 
   async function handleAdd(e) {
-    e.preventDefault();
+    if (e) e.preventDefault();
     if (!date) return;
     setError("");
     try {
@@ -356,7 +428,14 @@ function FollowupsPanel({ leadId, followups, onChange }) {
         </div>
         <div className="field">
           <label>Remarks</label>
-          <input value={remarks} onChange={(e) => setRemarks(e.target.value)} placeholder="What to discuss / why" />
+          <textarea
+            rows={1}
+            className="autosize-textarea"
+            value={remarks}
+            onChange={(e) => setRemarks(e.target.value)}
+            onKeyDown={submitOnEnter(() => handleAdd())}
+            placeholder="What to discuss / why (Shift+Enter for a new line)"
+          />
         </div>
         <button type="submit">Add Follow-up</button>
       </form>
@@ -391,7 +470,7 @@ function CallsPanel({ leadId, calls, onChange }) {
   const [error, setError] = useState("");
 
   async function handleAdd(e) {
-    e.preventDefault();
+    if (e) e.preventDefault();
     if (!response.trim()) return;
     setError("");
     try {
@@ -408,7 +487,14 @@ function CallsPanel({ leadId, calls, onChange }) {
       <form className="inline-form" onSubmit={handleAdd}>
         <div className="field">
           <label>What did the customer say?</label>
-          <input value={response} onChange={(e) => setResponse(e.target.value)} placeholder="Log the outcome of your call" />
+          <textarea
+            rows={1}
+            className="autosize-textarea"
+            value={response}
+            onChange={(e) => setResponse(e.target.value)}
+            onKeyDown={submitOnEnter(() => handleAdd())}
+            placeholder="Log the outcome of your call (Shift+Enter for a new line)"
+          />
         </div>
         <button type="submit">Log Call</button>
       </form>
@@ -439,7 +525,7 @@ function RemarksPanel({ leadId, remarks, onChange, isAdmin }) {
   const [editText, setEditText] = useState("");
 
   async function handleAdd(e) {
-    e.preventDefault();
+    if (e) e.preventDefault();
     if (!text.trim()) return;
     setError("");
     setSubmitting(true);
@@ -487,7 +573,14 @@ function RemarksPanel({ leadId, remarks, onChange, isAdmin }) {
       <form className="inline-form" onSubmit={handleAdd}>
         <div className="field">
           <label>Add a new remark</label>
-          <input value={text} onChange={(e) => setText(e.target.value)} placeholder="Write a new remark..." />
+          <textarea
+            rows={1}
+            className="autosize-textarea"
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            onKeyDown={submitOnEnter(() => handleAdd())}
+            placeholder="Write a new remark... (Shift+Enter for a new line)"
+          />
         </div>
         <button type="submit" disabled={submitting}>{submitting ? "Saving..." : "Add Remark"}</button>
       </form>
@@ -501,7 +594,14 @@ function RemarksPanel({ leadId, remarks, onChange, isAdmin }) {
           </div>
           {editingId === r.id ? (
             <div style={{ display: "flex", gap: 6, marginTop: 4 }}>
-              <input value={editText} onChange={(e) => setEditText(e.target.value)} autoFocus />
+              <textarea
+                rows={2}
+                className="autosize-textarea"
+                value={editText}
+                onChange={(e) => setEditText(e.target.value)}
+                onKeyDown={submitOnEnter(() => handleSaveEdit(r.id))}
+                autoFocus
+              />
               <button type="button" onClick={() => handleSaveEdit(r.id)}>Save</button>
               <button type="button" className="secondary" onClick={() => setEditingId(null)}>Cancel</button>
             </div>
@@ -519,6 +619,116 @@ function RemarksPanel({ leadId, remarks, onChange, isAdmin }) {
         </div>
       ))}
       {remarks.length === 0 && <p style={{ color: "#64748b" }}>No remarks yet.</p>}
+    </div>
+  );
+}
+
+// This whole tab only ever renders for an admin (gated in the parent), so
+// there's no per-item permission check here the way RemarksPanel needs one —
+// anyone who can see this panel at all can add/edit/delete freely.
+function AdminNotesPanel({ leadId, notes, onChange }) {
+  const [text, setText] = useState("");
+  const [error, setError] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [editingId, setEditingId] = useState(null);
+  const [editText, setEditText] = useState("");
+
+  async function handleAdd(e) {
+    if (e) e.preventDefault();
+    if (!text.trim()) return;
+    setError("");
+    setSubmitting(true);
+    try {
+      await api.addAdminNote(leadId, { note_text: text });
+      setText("");
+      onChange();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  function startEdit(n) {
+    setEditingId(n.id);
+    setEditText(n.note_text);
+  }
+
+  async function handleSaveEdit(noteId) {
+    if (!editText.trim()) return;
+    setError("");
+    try {
+      await api.updateAdminNote(leadId, noteId, { note_text: editText.trim() });
+      setEditingId(null);
+      onChange();
+    } catch (err) {
+      setError(err.message);
+    }
+  }
+
+  async function handleDelete(noteId) {
+    if (!window.confirm("Delete this note permanently?")) return;
+    setError("");
+    try {
+      await api.deleteAdminNote(leadId, noteId);
+      onChange();
+    } catch (err) {
+      setError(err.message);
+    }
+  }
+
+  return (
+    <div>
+      <p style={{ color: "#64748b", fontSize: 13, marginTop: -4 }}>
+        Only admins can see this tab — executives have no visibility into these notes at all.
+      </p>
+      <form className="inline-form" onSubmit={handleAdd}>
+        <div className="field">
+          <label>Add an admin note</label>
+          <textarea
+            rows={1}
+            className="autosize-textarea"
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            onKeyDown={submitOnEnter(() => handleAdd())}
+            placeholder="Write a private note... (Shift+Enter for a new line)"
+          />
+        </div>
+        <button type="submit" disabled={submitting}>{submitting ? "Saving..." : "Add Note"}</button>
+      </form>
+      {error && <div className="error-text">{error}</div>}
+
+      {notes.map((n) => (
+        <div className="list-item" key={n.id}>
+          <div className="top-row">
+            <span>{n.created_at}</span>
+            <span>{n.created_by_name}</span>
+          </div>
+          {editingId === n.id ? (
+            <div style={{ display: "flex", gap: 6, marginTop: 4 }}>
+              <textarea
+                rows={2}
+                className="autosize-textarea"
+                value={editText}
+                onChange={(e) => setEditText(e.target.value)}
+                onKeyDown={submitOnEnter(() => handleSaveEdit(n.id))}
+                autoFocus
+              />
+              <button type="button" onClick={() => handleSaveEdit(n.id)}>Save</button>
+              <button type="button" className="secondary" onClick={() => setEditingId(null)}>Cancel</button>
+            </div>
+          ) : (
+            <>
+              <div className="body-text">{n.note_text}</div>
+              <div style={{ marginTop: 6 }}>
+                <button className="secondary" onClick={() => startEdit(n)}>Edit</button>{" "}
+                <button className="danger" onClick={() => handleDelete(n.id)}>Delete</button>
+              </div>
+            </>
+          )}
+        </div>
+      ))}
+      {notes.length === 0 && <p style={{ color: "#64748b" }}>No admin notes yet.</p>}
     </div>
   );
 }

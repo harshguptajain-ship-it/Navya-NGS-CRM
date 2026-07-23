@@ -11,6 +11,7 @@ const leadsRoutes = require("./routes/leads.routes");
 const followupsRoutes = require("./routes/followups.routes");
 const callsRoutes = require("./routes/calls.routes");
 const remarksRoutes = require("./routes/remarks.routes");
+const adminNotesRoutes = require("./routes/adminNotes.routes");
 const adminRoutes = require("./routes/admin.routes");
 
 const app = express();
@@ -22,6 +23,7 @@ app.use("/api/leads", leadsRoutes);
 app.use("/api/leads/:leadId/followups", followupsRoutes);
 app.use("/api/leads/:leadId/calls", callsRoutes);
 app.use("/api/leads/:leadId/remarks", remarksRoutes);
+app.use("/api/leads/:leadId/admin-notes", adminNotesRoutes);
 app.use("/api/admin", adminRoutes);
 
 app.get("/api/health", (req, res) => res.json({ ok: true }));
