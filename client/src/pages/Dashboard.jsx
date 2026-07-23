@@ -1,13 +1,14 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { api } from "../api";
-import StageBadge, { STAGE_LABELS } from "../components/StageBadge.jsx";
+import StageBadge from "../components/StageBadge.jsx";
+import { useStages } from "../hooks/useStages.js";
 import { formatFollowUp, followUpDueState } from "../utils/followup.js";
-
-const STAGE_ORDER = Object.keys(STAGE_LABELS);
 
 export default function Dashboard() {
   const navigate = useNavigate();
+  const { stages, labelOf } = useStages();
+  const stageOrder = useMemo(() => stages.map((s) => s.key), [stages]);
   const [leads, setLeads] = useState([]);
   const [upcoming, setUpcoming] = useState([]);
   const [executives, setExecutives] = useState([]);
@@ -79,15 +80,15 @@ export default function Dashboard() {
 
   const counts = useMemo(() => {
     const c = {};
-    for (const s of STAGE_ORDER) c[s] = 0;
+    for (const s of stageOrder) c[s] = 0;
     for (const l of leads) c[l.stage] = (c[l.stage] || 0) + 1;
     return c;
-  }, [leads]);
+  }, [leads, stageOrder]);
 
   return (
     <div>
       <div className="stat-row">
-        {STAGE_ORDER.map((s) => (
+        {stageOrder.map((s) => (
           <div
             className="stat-box"
             key={s}
@@ -95,7 +96,7 @@ export default function Dashboard() {
             onClick={() => setStageFilter(stageFilter === s ? "" : s)}
           >
             <div className="num">{counts[s]}</div>
-            <div className="label">{STAGE_LABELS[s]}</div>
+            <div className="label">{labelOf(s)}</div>
           </div>
         ))}
       </div>
@@ -124,8 +125,8 @@ export default function Dashboard() {
         <form className="toolbar" onSubmit={handleSearchSubmit}>
           <select value={stageFilter} onChange={(e) => setStageFilter(e.target.value)}>
             <option value="">All stages</option>
-            {STAGE_ORDER.map((s) => (
-              <option key={s} value={s}>{STAGE_LABELS[s]}</option>
+            {stageOrder.map((s) => (
+              <option key={s} value={s}>{labelOf(s)}</option>
             ))}
           </select>
           <select value={assignedFilter} onChange={(e) => setAssignedFilter(e.target.value)}>
@@ -169,6 +170,7 @@ export default function Dashboard() {
                   <th>Next Follow-up</th>
                   <th>Assigned To</th>
                   <th>Handling By</th>
+                  <th>Last Remark</th>
                   <th>Updated</th>
                 </tr>
               </thead>
@@ -178,15 +180,16 @@ export default function Dashboard() {
                     <td>{l.name}</td>
                     <td>{l.phone || "-"}</td>
                     <td>{l.source || "-"}</td>
-                    <td><StageBadge stage={l.stage} /></td>
+                    <td><StageBadge stage={l.stage} label={labelOf(l.stage)} /></td>
                     <td>{formatFollowUp(l.next_follow_up_date)}</td>
                     <td>{l.assigned_to_name || "Unassigned"}</td>
                     <td>{l.handling_by_name || "-"}</td>
+                    <td className="remark-cell" title={l.last_remark || ""}>{l.last_remark || "-"}</td>
                     <td>{l.updated_at}</td>
                   </tr>
                 ))}
                 {leads.length === 0 && (
-                  <tr><td colSpan={8} style={{ textAlign: "center", color: "#64748b" }}>No leads found</td></tr>
+                  <tr><td colSpan={9} style={{ textAlign: "center", color: "#64748b" }}>No leads found</td></tr>
                 )}
               </tbody>
             </table>

@@ -1,24 +1,36 @@
 const express = require("express");
 const ExcelJS = require("exceljs");
 const db = require("../db");
-const { requireAuth } = require("../middleware/auth");
-const { STAGES, isValidStage } = require("../utils/stages");
+const { requireAuth, requireAdmin } = require("../middleware/auth");
+const { requireLeadAccess, visibilityFilter } = require("../middleware/leadAccess");
+const { getStages, isValidStage } = require("../utils/stages");
 
 const router = express.Router();
 
-const STAGE_LABELS = Object.fromEntries(STAGES.map((s) => [s.key, s.label]));
+// Stages can change at runtime (admin add/rename/delete), so labels are looked
+// up fresh per-request rather than cached at module load.
+function stageLabels() {
+  return Object.fromEntries(getStages().map((s) => [s.key, s.label]));
+}
 
 // Leads with a pending follow-up first (soonest due date on top), then leads
 // with no follow-up at all, most recently created first.
 const LEAD_ORDER = `ORDER BY (next_follow_up_date IS NULL) ASC, next_follow_up_date ASC, l.created_at DESC`;
 
+// "Last remark" is whichever is more recent: a note from the dedicated Remarks
+// tab, or the optional remark typed in when the stage was last changed.
 const LEAD_SELECT = `
   SELECT
     l.*,
     u1.name AS assigned_to_name,
     u2.name AS created_by_name,
     u3.name AS handling_by_name,
-    (SELECT MIN(f.follow_up_date) FROM followups f WHERE f.lead_id = l.id AND f.status = 'pending') AS next_follow_up_date
+    (SELECT MIN(f.follow_up_date) FROM followups f WHERE f.lead_id = l.id AND f.status = 'pending') AS next_follow_up_date,
+    (SELECT text FROM (
+       SELECT remark_text AS text, created_at AS ts FROM remarks WHERE lead_id = l.id
+       UNION ALL
+       SELECT remarks AS text, changed_at AS ts FROM stage_history WHERE lead_id = l.id AND remarks IS NOT NULL AND remarks <> ''
+     ) ORDER BY ts DESC LIMIT 1) AS last_remark
   FROM leads l
   LEFT JOIN users u1 ON u1.id = l.assigned_to
   LEFT JOIN users u2 ON u2.id = l.created_by
@@ -44,26 +56,30 @@ function findLeadByPhone(phone, excludeId) {
 }
 
 router.get("/stages", requireAuth, (req, res) => {
-  res.json({ stages: STAGES });
+  res.json({ stages: getStages() });
 });
 
 // Distinct, non-empty source values currently in use — powers the Source filter dropdown.
 // Grouped case-insensitively so "Telecaller" and "telecaller" show as one option.
+// Scoped to leads the requesting user can actually see, same as everything else here.
 router.get("/sources", requireAuth, (req, res) => {
+  const vis = visibilityFilter(req.user);
   const rows = db
     .prepare(
-      `SELECT source FROM leads WHERE source IS NOT NULL AND source <> ''
+      `SELECT source FROM leads l WHERE source IS NOT NULL AND source <> '' AND ${vis.clause}
        GROUP BY LOWER(source) ORDER BY source COLLATE NOCASE`
     )
-    .all();
+    .all(vis.params);
   res.json({ sources: rows.map((r) => r.source) });
 });
 
-// List leads, optionally filtered by stage / assigned_to / handling_by / source / search text
+// List leads, optionally filtered by stage / assigned_to / handling_by / source / search text.
+// Executives only ever see leads they created, or are assigned/handling — admins see everything.
 router.get("/", requireAuth, (req, res) => {
   const { stage, assigned_to, handling_by, source, q } = req.query;
-  const clauses = [];
-  const params = {};
+  const vis = visibilityFilter(req.user);
+  const clauses = [vis.clause];
+  const params = { ...vis.params };
 
   if (stage) {
     clauses.push("l.stage = @stage");
@@ -86,16 +102,17 @@ router.get("/", requireAuth, (req, res) => {
     params.q = `%${q}%`;
   }
 
-  const where = clauses.length ? `WHERE ${clauses.join(" AND ")}` : "";
+  const where = `WHERE ${clauses.join(" AND ")}`;
   const rows = db.prepare(`${LEAD_SELECT} ${where} ${LEAD_ORDER}`).all(params);
   res.json({ leads: rows });
 });
 
-// Export all leads (respecting the same filters as the list view) as an .xlsx file.
+// Export all leads (respecting the same filters + visibility as the list view) as an .xlsx file.
 router.get("/export", requireAuth, async (req, res) => {
   const { stage, assigned_to, handling_by, source, q } = req.query;
-  const clauses = [];
-  const params = {};
+  const vis = visibilityFilter(req.user);
+  const clauses = [vis.clause];
+  const params = { ...vis.params };
 
   if (stage) {
     clauses.push("l.stage = @stage");
@@ -118,7 +135,7 @@ router.get("/export", requireAuth, async (req, res) => {
     params.q = `%${q}%`;
   }
 
-  const where = clauses.length ? `WHERE ${clauses.join(" AND ")}` : "";
+  const where = `WHERE ${clauses.join(" AND ")}`;
   const rows = db.prepare(`${LEAD_SELECT} ${where} ${LEAD_ORDER}`).all(params);
 
   const workbook = new ExcelJS.Workbook();
@@ -135,16 +152,18 @@ router.get("/export", requireAuth, async (req, res) => {
     { header: "Assigned To", key: "assigned_to_name", width: 18 },
     { header: "Handling By", key: "handling_by_name", width: 18 },
     { header: "Next Follow-up", key: "next_follow_up_date", width: 16 },
+    { header: "Last Remark", key: "last_remark", width: 32 },
     { header: "Notes", key: "notes", width: 30 },
     { header: "Created At", key: "created_at", width: 20 },
     { header: "Created By", key: "created_by_name", width: 18 },
     { header: "Updated At", key: "updated_at", width: 20 },
   ];
   sheet.getRow(1).font = { bold: true };
-  sheet.autoFilter = { from: "A1", to: "O1" };
+  sheet.autoFilter = { from: "A1", to: "P1" };
 
+  const labels = stageLabels();
   for (const r of rows) {
-    sheet.addRow({ ...r, stage_label: STAGE_LABELS[r.stage] || r.stage });
+    sheet.addRow({ ...r, stage_label: labels[r.stage] || r.stage });
   }
 
   res.setHeader(
@@ -161,19 +180,20 @@ router.get("/export", requireAuth, async (req, res) => {
 
 // Leads with a pending follow-up due today or earlier (overdue) or upcoming
 router.get("/followups/upcoming", requireAuth, (req, res) => {
+  const vis = visibilityFilter(req.user, "l");
   const rows = db
     .prepare(
       `SELECT f.*, l.name AS lead_name, l.phone AS lead_phone, l.stage AS lead_stage
        FROM followups f
        JOIN leads l ON l.id = f.lead_id
-       WHERE f.status = 'pending'
+       WHERE f.status = 'pending' AND ${vis.clause}
        ORDER BY f.follow_up_date ASC`
     )
-    .all();
+    .all(vis.params);
   res.json({ followups: rows });
 });
 
-router.get("/:id", requireAuth, (req, res) => {
+router.get("/:id", requireAuth, requireLeadAccess("id"), (req, res) => {
   const lead = db.prepare(`${LEAD_SELECT} WHERE l.id = ?`).get(req.params.id);
   if (!lead) return res.status(404).json({ error: "Lead not found" });
 
@@ -258,7 +278,7 @@ router.post("/", requireAuth, (req, res) => {
   res.status(201).json({ lead });
 });
 
-router.put("/:id", requireAuth, (req, res) => {
+router.put("/:id", requireAuth, requireLeadAccess("id"), (req, res) => {
   const existing = db.prepare("SELECT * FROM leads WHERE id = ?").get(req.params.id);
   if (!existing) return res.status(404).json({ error: "Lead not found" });
 
@@ -308,7 +328,7 @@ router.put("/:id", requireAuth, (req, res) => {
 });
 
 // The core workflow action: move a lead to a new stage, logging history + timestamps.
-router.put("/:id/stage", requireAuth, (req, res) => {
+router.put("/:id/stage", requireAuth, requireLeadAccess("id"), (req, res) => {
   const { stage, remarks } = req.body;
   if (!isValidStage(stage)) {
     return res.status(400).json({ error: "Invalid stage value" });
@@ -336,7 +356,9 @@ router.put("/:id/stage", requireAuth, (req, res) => {
   res.json({ lead });
 });
 
-router.delete("/:id", requireAuth, (req, res) => {
+// Deleting a lead outright is an admin-only "control" action; executives work
+// leads (stage/remarks/follow-ups/calls) but don't remove them.
+router.delete("/:id", requireAuth, requireAdmin, (req, res) => {
   const existing = db.prepare("SELECT id FROM leads WHERE id = ?").get(req.params.id);
   if (!existing) return res.status(404).json({ error: "Lead not found" });
   db.prepare("DELETE FROM leads WHERE id = ?").run(req.params.id);

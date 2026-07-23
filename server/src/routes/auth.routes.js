@@ -62,4 +62,74 @@ router.post("/users", requireAuth, requireAdmin, (req, res) => {
   });
 });
 
+function adminCount(excludeId) {
+  return excludeId
+    ? db.prepare("SELECT COUNT(*) AS c FROM users WHERE role = 'admin' AND id != ?").get(excludeId).c
+    : db.prepare("SELECT COUNT(*) AS c FROM users WHERE role = 'admin'").get().c;
+}
+
+// Edit an executive/admin: name, email, role, and optionally reset their password.
+router.put("/users/:id", requireAuth, requireAdmin, (req, res) => {
+  const existing = db.prepare("SELECT * FROM users WHERE id = ?").get(req.params.id);
+  if (!existing) return res.status(404).json({ error: "User not found" });
+
+  const { name, email, password, role } = req.body;
+  const nextEmail = (email ?? existing.email).toLowerCase();
+  const nextRole = role === "admin" || role === "executive" ? role : existing.role;
+
+  if (nextEmail !== existing.email) {
+    const dupe = db.prepare("SELECT id FROM users WHERE email = ? AND id != ?").get(nextEmail, req.params.id);
+    if (dupe) return res.status(409).json({ error: "A user with this email already exists" });
+  }
+
+  // Don't allow demoting the last admin — there must always be someone who can manage the team.
+  if (existing.role === "admin" && nextRole !== "admin" && adminCount(existing.id) === 0) {
+    return res.status(400).json({ error: "Cannot demote the only remaining admin" });
+  }
+
+  const passwordHash = password && password.trim() ? bcrypt.hashSync(password.trim(), 10) : existing.password_hash;
+
+  db.prepare(
+    "UPDATE users SET name = ?, email = ?, role = ?, password_hash = ? WHERE id = ?"
+  ).run(name ?? existing.name, nextEmail, nextRole, passwordHash, req.params.id);
+
+  const user = db.prepare("SELECT id, name, email, role, created_at FROM users WHERE id = ?").get(req.params.id);
+  res.json({ user });
+});
+
+router.delete("/users/:id", requireAuth, requireAdmin, (req, res) => {
+  const existing = db.prepare("SELECT * FROM users WHERE id = ?").get(req.params.id);
+  if (!existing) return res.status(404).json({ error: "User not found" });
+
+  if (Number(req.params.id) === req.user.id) {
+    return res.status(400).json({ error: "You can't delete your own account" });
+  }
+  if (existing.role === "admin" && adminCount(existing.id) === 0) {
+    return res.status(400).json({ error: "Cannot delete the only remaining admin" });
+  }
+
+  // Leads/calls/followups/remarks/stage_history reference users without ON DELETE
+  // CASCADE — check first so we can give a clear reason instead of a raw SQL error.
+  const refCounts = db
+    .prepare(
+      `SELECT
+        (SELECT COUNT(*) FROM leads WHERE created_by = @id OR assigned_to = @id OR handling_by = @id) AS leads,
+        (SELECT COUNT(*) FROM followups WHERE created_by = @id) AS followups,
+        (SELECT COUNT(*) FROM calls WHERE executive_id = @id) AS calls,
+        (SELECT COUNT(*) FROM remarks WHERE created_by = @id) AS remarks,
+        (SELECT COUNT(*) FROM stage_history WHERE changed_by = @id) AS stage_history`
+    )
+    .get({ id: req.params.id });
+
+  const totalRefs = Object.values(refCounts).reduce((a, b) => a + b, 0);
+  if (totalRefs > 0) {
+    return res.status(400).json({
+      error: `Cannot delete: this user is linked to ${refCounts.leads} lead(s) and other activity (follow-ups, calls, remarks, or stage history). Reassign their leads to another executive first.`,
+    });
+  }
+
+  db.prepare("DELETE FROM users WHERE id = ?").run(req.params.id);
+  res.status(204).end();
+});
+
 module.exports = router;

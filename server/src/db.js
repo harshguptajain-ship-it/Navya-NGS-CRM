@@ -75,6 +75,12 @@ CREATE TABLE IF NOT EXISTS remarks (
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+CREATE TABLE IF NOT EXISTS stages (
+  key TEXT PRIMARY KEY,
+  label TEXT NOT NULL,
+  sort_order INTEGER NOT NULL DEFAULT 0
+);
+
 CREATE INDEX IF NOT EXISTS idx_leads_stage ON leads(stage);
 CREATE INDEX IF NOT EXISTS idx_followups_lead ON followups(lead_id);
 CREATE INDEX IF NOT EXISTS idx_followups_date ON followups(follow_up_date);
@@ -87,6 +93,23 @@ CREATE INDEX IF NOT EXISTS idx_remarks_lead ON remarks(lead_id);
 const leadColumns = db.prepare("PRAGMA table_info(leads)").all().map((c) => c.name);
 if (!leadColumns.includes("handling_by")) {
   db.exec("ALTER TABLE leads ADD COLUMN handling_by INTEGER REFERENCES users(id)");
+}
+
+// Seed the stages table from the original hardcoded lifecycle, once, so
+// existing deployments keep the same stages/order they already had.
+const stageCount = db.prepare("SELECT COUNT(*) AS c FROM stages").get().c;
+if (stageCount === 0) {
+  const DEFAULT_STAGES = [
+    { key: "new", label: "New Lead" },
+    { key: "follow_up", label: "Follow-up in Progress" },
+    { key: "ready_for_documents", label: "Ready - Documents Requested" },
+    { key: "documents_received", label: "Documents Received" },
+    { key: "file_logged", label: "File Logged" },
+    { key: "approved", label: "Approved" },
+    { key: "rejected", label: "Rejected" },
+  ];
+  const insertStage = db.prepare("INSERT INTO stages (key, label, sort_order) VALUES (?, ?, ?)");
+  DEFAULT_STAGES.forEach((s, i) => insertStage.run(s.key, s.label, i));
 }
 
 // Enforce unique phone numbers (blank/NULL phones are exempt so they don't collide).

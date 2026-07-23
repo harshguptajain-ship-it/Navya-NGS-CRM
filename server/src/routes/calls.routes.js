@@ -1,10 +1,12 @@
 const express = require("express");
 const db = require("../db");
 const { requireAuth } = require("../middleware/auth");
+const { requireLeadAccess } = require("../middleware/leadAccess");
 
 const router = express.Router({ mergeParams: true });
+router.use(requireAuth, requireLeadAccess());
 
-router.get("/", requireAuth, (req, res) => {
+router.get("/", (req, res) => {
   const rows = db
     .prepare(
       `SELECT c.*, u.name AS executive_name FROM calls c
@@ -16,11 +18,8 @@ router.get("/", requireAuth, (req, res) => {
 });
 
 // Log a call made by the currently logged-in executive: what the customer said, when.
-router.post("/", requireAuth, (req, res) => {
+router.post("/", (req, res) => {
   const { customer_response, call_date } = req.body;
-
-  const lead = db.prepare("SELECT id FROM leads WHERE id = ?").get(req.params.leadId);
-  if (!lead) return res.status(404).json({ error: "Lead not found" });
 
   const info = db
     .prepare(
@@ -40,7 +39,7 @@ router.post("/", requireAuth, (req, res) => {
   res.status(201).json({ call });
 });
 
-router.delete("/:callId", requireAuth, (req, res) => {
+router.delete("/:callId", (req, res) => {
   const existing = db.prepare("SELECT id FROM calls WHERE id = ? AND lead_id = ?").get(
     req.params.callId,
     req.params.leadId

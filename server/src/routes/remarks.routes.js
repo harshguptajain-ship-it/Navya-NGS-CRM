@@ -1,10 +1,12 @@
 const express = require("express");
 const db = require("../db");
 const { requireAuth } = require("../middleware/auth");
+const { requireLeadAccess } = require("../middleware/leadAccess");
 
 const router = express.Router({ mergeParams: true });
+router.use(requireAuth, requireLeadAccess());
 
-router.get("/", requireAuth, (req, res) => {
+router.get("/", (req, res) => {
   const rows = db
     .prepare(
       `SELECT r.*, u.name AS created_by_name FROM remarks r
@@ -17,14 +19,11 @@ router.get("/", requireAuth, (req, res) => {
 
 // Add a new, standalone remark entry. Each call creates its own row so the
 // full history of remarks over time is preserved (nothing gets overwritten).
-router.post("/", requireAuth, (req, res) => {
+router.post("/", (req, res) => {
   const { remark_text } = req.body;
   if (!remark_text || !remark_text.trim()) {
     return res.status(400).json({ error: "remark_text is required" });
   }
-
-  const lead = db.prepare("SELECT id FROM leads WHERE id = ?").get(req.params.leadId);
-  if (!lead) return res.status(404).json({ error: "Lead not found" });
 
   const info = db
     .prepare("INSERT INTO remarks (lead_id, remark_text, created_by) VALUES (?, ?, ?)")
@@ -41,7 +40,7 @@ router.post("/", requireAuth, (req, res) => {
   res.status(201).json({ remark });
 });
 
-router.delete("/:remarkId", requireAuth, (req, res) => {
+router.delete("/:remarkId", (req, res) => {
   const existing = db.prepare("SELECT id FROM remarks WHERE id = ? AND lead_id = ?").get(
     req.params.remarkId,
     req.params.leadId

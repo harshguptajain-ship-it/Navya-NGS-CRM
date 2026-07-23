@@ -37,8 +37,14 @@ export const api = {
   me: () => request("/auth/me"),
   listUsers: () => request("/auth/users"),
   createUser: (payload) => request("/auth/users", { method: "POST", body: JSON.stringify(payload) }),
+  updateUser: (id, payload) => request(`/auth/users/${id}`, { method: "PUT", body: JSON.stringify(payload) }),
+  deleteUser: (id) => request(`/auth/users/${id}`, { method: "DELETE" }),
 
   stages: () => request("/leads/stages"),
+  createStage: (payload) => request("/admin/stages", { method: "POST", body: JSON.stringify(payload) }),
+  renameStage: (key, payload) => request(`/admin/stages/${key}`, { method: "PUT", body: JSON.stringify(payload) }),
+  deleteStage: (key) => request(`/admin/stages/${key}`, { method: "DELETE" }),
+  reorderStages: (order) => request("/admin/stages/reorder", { method: "PUT", body: JSON.stringify({ order }) }),
   listSources: () => request("/leads/sources"),
   listLeads: (params = {}) => {
     const qs = new URLSearchParams(Object.entries(params).filter(([, v]) => v)).toString();

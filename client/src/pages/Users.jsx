@@ -1,11 +1,17 @@
 import React, { useEffect, useState } from "react";
 import { api } from "../api";
+import { useAuth } from "../AuthContext.jsx";
 
 export default function Users() {
+  const { user: me } = useAuth();
   const [users, setUsers] = useState([]);
   const [form, setForm] = useState({ name: "", email: "", password: "", role: "executive" });
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+
+  const [editingId, setEditingId] = useState(null);
+  const [editForm, setEditForm] = useState({ name: "", email: "", password: "", role: "executive" });
+  const [rowError, setRowError] = useState("");
 
   async function load() {
     const res = await api.listUsers();
@@ -32,6 +38,40 @@ export default function Users() {
       setError(err.message);
     } finally {
       setSubmitting(false);
+    }
+  }
+
+  function startEdit(u) {
+    setRowError("");
+    setEditingId(u.id);
+    setEditForm({ name: u.name, email: u.email, password: "", role: u.role });
+  }
+
+  function updateEdit(field, value) {
+    setEditForm((f) => ({ ...f, [field]: value }));
+  }
+
+  async function handleSaveEdit(id) {
+    setRowError("");
+    try {
+      const payload = { name: editForm.name, email: editForm.email, role: editForm.role };
+      if (editForm.password.trim()) payload.password = editForm.password.trim();
+      await api.updateUser(id, payload);
+      setEditingId(null);
+      await load();
+    } catch (err) {
+      setRowError(err.message);
+    }
+  }
+
+  async function handleDelete(u) {
+    if (!window.confirm(`Delete ${u.name}? This only works if they have no leads or activity linked to them.`)) return;
+    setRowError("");
+    try {
+      await api.deleteUser(u.id);
+      await load();
+    } catch (err) {
+      setRowError(err.message);
     }
   }
 
@@ -66,18 +106,57 @@ export default function Users() {
 
       <div className="card">
         <h2 style={{ marginTop: 0 }}>Team</h2>
+        {rowError && <div className="error-text">{rowError}</div>}
         <table>
           <thead>
-            <tr><th>Name</th><th>Email</th><th>Role</th><th>Since</th></tr>
+            <tr><th>Name</th><th>Email</th><th>Role</th><th>Since</th><th></th></tr>
           </thead>
           <tbody>
             {users.map((u) => (
-              <tr key={u.id}>
-                <td>{u.name}</td>
-                <td>{u.email}</td>
-                <td>{u.role}</td>
-                <td>{u.created_at}</td>
-              </tr>
+              editingId === u.id ? (
+                <tr key={u.id}>
+                  <td><input value={editForm.name} onChange={(e) => updateEdit("name", e.target.value)} /></td>
+                  <td><input type="email" value={editForm.email} onChange={(e) => updateEdit("email", e.target.value)} /></td>
+                  <td>
+                    <select value={editForm.role} onChange={(e) => updateEdit("role", e.target.value)}>
+                      <option value="executive">Executive</option>
+                      <option value="admin">Admin</option>
+                    </select>
+                  </td>
+                  <td colSpan={2}>
+                    <span style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+                      <input
+                        type="password"
+                        placeholder="New password (optional)"
+                        value={editForm.password}
+                        onChange={(e) => updateEdit("password", e.target.value)}
+                        style={{ width: 170 }}
+                      />
+                      <button type="button" onClick={() => handleSaveEdit(u.id)}>Save</button>
+                      <button type="button" className="secondary" onClick={() => setEditingId(null)}>Cancel</button>
+                    </span>
+                  </td>
+                </tr>
+              ) : (
+                <tr key={u.id}>
+                  <td>{u.name}</td>
+                  <td>{u.email}</td>
+                  <td>{u.role}</td>
+                  <td>{u.created_at}</td>
+                  <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
+                    <button type="button" className="secondary" onClick={() => startEdit(u)}>Edit</button>{" "}
+                    <button
+                      type="button"
+                      className="danger"
+                      disabled={u.id === me?.id}
+                      title={u.id === me?.id ? "You can't delete your own account" : ""}
+                      onClick={() => handleDelete(u)}
+                    >
+                      Delete
+                    </button>
+                  </td>
+                </tr>
+              )
             ))}
           </tbody>
         </table>

@@ -1,14 +1,15 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { api } from "../api";
-import StageBadge, { STAGE_LABELS } from "../components/StageBadge.jsx";
+import StageBadge from "../components/StageBadge.jsx";
+import { useStages } from "../hooks/useStages.js";
 import { formatFollowUp, followUpDueState } from "../utils/followup.js";
-
-const STAGE_ORDER = Object.keys(STAGE_LABELS);
 
 export default function LeadDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { stages, labelOf } = useStages();
+  const stageOrder = stages.map((s) => s.key);
   const [lead, setLead] = useState(null);
   const [followups, setFollowups] = useState([]);
   const [calls, setCalls] = useState([]);
@@ -47,7 +48,7 @@ export default function LeadDetail() {
 
   async function handleStageChange(stage) {
     if (stage === lead.stage) return;
-    const remarksText = window.prompt(`Move to "${STAGE_LABELS[stage]}". Optional remarks:`, "");
+    const remarksText = window.prompt(`Move to "${labelOf(stage)}". Optional remarks:`, "");
     if (remarksText === null) return; // cancelled
     try {
       await api.updateStage(id, { stage, remarks: remarksText });
@@ -120,20 +121,20 @@ export default function LeadDetail() {
             <div className="meta-line">Created {lead.created_at} by {lead.created_by_name || "-"} · Last updated {lead.updated_at}</div>
           </div>
           <div style={{ textAlign: "right" }}>
-            <StageBadge stage={lead.stage} />
+            <StageBadge stage={lead.stage} label={labelOf(lead.stage)} />
             <div className="meta-line">since {lead.stage_updated_at}</div>
             <button className="danger" style={{ marginTop: 8 }} onClick={handleDeleteLead}>Delete Lead</button>
           </div>
         </div>
 
         <div className="stage-picker">
-          {STAGE_ORDER.map((s) => (
+          {stageOrder.map((s) => (
             <button
               key={s}
               className={s === lead.stage ? "current" : ""}
               onClick={() => handleStageChange(s)}
             >
-              {STAGE_LABELS[s]}
+              {labelOf(s)}
             </button>
           ))}
         </div>
@@ -163,7 +164,7 @@ export default function LeadDetail() {
         )}
         {tab === "calls" && <CallsPanel leadId={id} calls={calls} onChange={load} />}
         {tab === "remarks" && <RemarksPanel leadId={id} remarks={remarks} onChange={load} />}
-        {tab === "history" && <HistoryPanel history={stageHistory} />}
+        {tab === "history" && <HistoryPanel history={stageHistory} labelOf={labelOf} />}
       </div>
     </div>
   );
@@ -326,7 +327,7 @@ function RemarksPanel({ leadId, remarks, onChange }) {
   );
 }
 
-function HistoryPanel({ history }) {
+function HistoryPanel({ history, labelOf }) {
   return (
     <div>
       {history.map((h) => (
@@ -336,8 +337,8 @@ function HistoryPanel({ history }) {
             <span>{h.changed_by_name}</span>
           </div>
           <div className="body-text">
-            {h.old_stage ? `${STAGE_LABELS[h.old_stage] || h.old_stage} → ` : ""}
-            {STAGE_LABELS[h.new_stage] || h.new_stage}
+            {h.old_stage ? `${labelOf(h.old_stage)} → ` : ""}
+            {labelOf(h.new_stage)}
           </div>
           {h.remarks && <div className="body-text">{h.remarks}</div>}
         </div>

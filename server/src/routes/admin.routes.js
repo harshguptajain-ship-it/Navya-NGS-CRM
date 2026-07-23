@@ -3,8 +3,47 @@ const fs = require("fs");
 const path = require("path");
 const db = require("../db");
 const { requireAuth, requireAdmin } = require("../middleware/auth");
+const stages = require("../utils/stages");
 
 const router = express.Router();
+
+// Stage management: add/rename/delete/reorder the lead lifecycle stages
+// (e.g. adding "Interested" / "Not Interested") without touching code.
+router.post("/stages", requireAuth, requireAdmin, (req, res) => {
+  try {
+    const stage = stages.createStage(req.body.label);
+    res.status(201).json({ stage });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+router.put("/stages/reorder", requireAuth, requireAdmin, (req, res) => {
+  try {
+    stages.reorderStages(req.body.order);
+    res.json({ stages: stages.getStages() });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+router.put("/stages/:key", requireAuth, requireAdmin, (req, res) => {
+  try {
+    const stage = stages.renameStage(req.params.key, req.body.label);
+    res.json({ stage });
+  } catch (err) {
+    res.status(err.message === "Stage not found" ? 404 : 400).json({ error: err.message });
+  }
+});
+
+router.delete("/stages/:key", requireAuth, requireAdmin, (req, res) => {
+  try {
+    stages.deleteStage(req.params.key);
+    res.status(204).end();
+  } catch (err) {
+    res.status(err.message === "Stage not found" ? 404 : 400).json({ error: err.message });
+  }
+});
 
 // SQLite (WAL mode) keeps recent writes in crm.db-wal until a checkpoint merges
 // them into crm.db itself. Run this on the SOURCE server before copying/uploading

@@ -1,10 +1,12 @@
 const express = require("express");
 const db = require("../db");
 const { requireAuth } = require("../middleware/auth");
+const { requireLeadAccess } = require("../middleware/leadAccess");
 
 const router = express.Router({ mergeParams: true });
+router.use(requireAuth, requireLeadAccess());
 
-router.get("/", requireAuth, (req, res) => {
+router.get("/", (req, res) => {
   const rows = db
     .prepare(
       `SELECT f.*, u.name AS created_by_name FROM followups f
@@ -15,12 +17,9 @@ router.get("/", requireAuth, (req, res) => {
   res.json({ followups: rows });
 });
 
-router.post("/", requireAuth, (req, res) => {
+router.post("/", (req, res) => {
   const { follow_up_date, remarks } = req.body;
   if (!follow_up_date) return res.status(400).json({ error: "follow_up_date is required" });
-
-  const lead = db.prepare("SELECT id FROM leads WHERE id = ?").get(req.params.leadId);
-  if (!lead) return res.status(404).json({ error: "Lead not found" });
 
   const info = db
     .prepare(
@@ -35,7 +34,7 @@ router.post("/", requireAuth, (req, res) => {
 });
 
 // Update a follow-up: reschedule the date, edit remarks, or mark done/cancelled.
-router.put("/:followupId", requireAuth, (req, res) => {
+router.put("/:followupId", (req, res) => {
   const existing = db.prepare("SELECT * FROM followups WHERE id = ? AND lead_id = ?").get(
     req.params.followupId,
     req.params.leadId
@@ -61,7 +60,7 @@ router.put("/:followupId", requireAuth, (req, res) => {
   res.json({ followup });
 });
 
-router.delete("/:followupId", requireAuth, (req, res) => {
+router.delete("/:followupId", (req, res) => {
   const existing = db.prepare("SELECT id FROM followups WHERE id = ? AND lead_id = ?").get(
     req.params.followupId,
     req.params.leadId
