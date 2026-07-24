@@ -10,19 +10,22 @@ export function localNowString() {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
-// Reformats the time portion of a raw "YYYY-MM-DD HH:MM:SS" (or "...THH:MM")
-// timestamp to 12-hour AM/PM — doesn't reinterpret the timezone it was stored
-// in, just changes how the same wall-clock time is displayed.
+// Server-generated timestamps (created_at, updated_at, call_date, etc.) are
+// written by SQLite's datetime('now'), which is always UTC, as a bare
+// "YYYY-MM-DD HH:MM:SS" string with no timezone marker. Parsed naively that
+// gets treated as local time and displayed hours off from the real time it
+// happened — so parse it explicitly as UTC and render it in the viewer's
+// local time instead.
 export function formatDateTime(value) {
   if (!value) return "-";
-  const [datePart, rawTime] = value.replace("T", " ").split(" ");
-  if (!rawTime) return datePart;
-  const [hStr, mStr] = rawTime.split(":");
-  let h = parseInt(hStr, 10);
-  if (Number.isNaN(h)) return value;
+  const isoUtc = value.includes("T") ? value : `${value.replace(" ", "T")}Z`;
+  const d = new Date(isoUtc);
+  if (Number.isNaN(d.getTime())) return value;
+  const pad = (n) => String(n).padStart(2, "0");
+  let h = d.getHours();
   const suffix = h >= 12 ? "PM" : "AM";
   h = h % 12 || 12;
-  return `${datePart} ${h}:${mStr} ${suffix}`;
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${h}:${pad(d.getMinutes())} ${suffix}`;
 }
 
 export function formatFollowUp(value) {
@@ -38,6 +41,18 @@ export function formatFollowUp(value) {
     minute: "2-digit",
     hour12: true,
   });
+}
+
+// Buckets a follow-up date for the Follow-ups tab: "overdue" (any day before
+// today), "today", or "upcoming" (a future day) — by calendar date only, not
+// time-of-day, so a follow-up due earlier today isn't "overdue" until tomorrow.
+export function followUpGroup(value) {
+  if (!value) return null;
+  const today = localNowString().slice(0, 10);
+  const date = value.slice(0, 10);
+  if (date < today) return "overdue";
+  if (date === today) return "today";
+  return "upcoming";
 }
 
 // Returns whether a follow-up should be visually flagged, and whether it's

@@ -99,6 +99,10 @@ tr:hover td { background: #f1f5f9; }
 .followup-cell { display: inline-flex; align-items: center; gap: 8px; }
 .mark-done-btn { padding: 2px 8px; font-size: 11px; white-space: nowrap; }
 
+.followup-section { margin-bottom: 28px; }
+.followup-section:last-child { margin-bottom: 0; }
+.followup-section-title { font-size: 14px; font-weight: 700; color: #334155; margin: 0 0 10px; padding-bottom: 8px; border-bottom: 2px solid #e2e8f0; }
+
 /* Duplicates the table's header-filter dropdowns for narrow screens, where
    the table becomes a stacked card list and its <thead> (and the dropdowns
    living in it) is hidden. Desktop keeps just the header dropdowns. */

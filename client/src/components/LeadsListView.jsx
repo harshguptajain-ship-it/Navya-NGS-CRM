@@ -5,8 +5,14 @@ import StageBadge, { colorForIndex } from "./StageBadge.jsx";
 import { useStages } from "../hooks/useStages.js";
 import { useStatuses } from "../hooks/useStatuses.js";
 import { useAuth } from "../AuthContext.jsx";
-import { formatFollowUp, formatDateTime } from "../utils/followup.js";
+import { formatFollowUp, formatDateTime, followUpGroup } from "../utils/followup.js";
 import { createdRangeFor, customRangeFor } from "../utils/dateRange.js";
+
+const FOLLOWUP_SECTIONS = [
+  { key: "overdue", title: "Overdue" },
+  { key: "today", title: "Due Today" },
+  { key: "upcoming", title: "Upcoming" },
+];
 
 const CREATED_PRESETS = [
   { key: "", label: "All time" },
@@ -17,11 +23,11 @@ const CREATED_PRESETS = [
 ];
 
 // Powers the main Dashboard (caseStatus="open"), the Closed Cases tab
-// (caseStatus="closed"), and the Premium Leads tab (premiumOnly) — same
-// filters, same table, same everything, just scoped to a different slice.
-// caseStatus and premiumOnly are independent: a lead can be both closed and
-// premium, so the Premium tab isn't restricted to open cases.
-export default function LeadsListView({ caseStatus, premiumOnly }) {
+// (caseStatus="closed"), the Premium Leads tab (premiumOnly), and the
+// Follow-ups tab (followupOnly) — same filters, same table, same everything,
+// just scoped to a different slice. caseStatus, premiumOnly and followupOnly
+// are independent: e.g. a closed lead can still have a pending follow-up.
+export default function LeadsListView({ caseStatus, premiumOnly, followupOnly }) {
   const navigate = useNavigate();
   const { user } = useAuth();
   const { stages, labelOf, colorIndexOf } = useStages();
@@ -44,14 +50,17 @@ export default function LeadsListView({ caseStatus, premiumOnly }) {
   const [exporting, setExporting] = useState(false);
 
   const isAdmin = user?.role === "admin";
-  // Neither of these secondary views is where you'd start a brand-new lead —
-  // new leads always start open and non-premium — so both hide "+ New Lead".
-  const isSecondaryView = caseStatus === "closed" || premiumOnly;
+  // None of these secondary views is where you'd start a brand-new lead —
+  // new leads always start open, non-premium, and with no follow-up yet — so
+  // all three hide "+ New Lead".
+  const isSecondaryView = caseStatus === "closed" || premiumOnly || followupOnly;
 
   function filterParams() {
     return {
       case_status: caseStatus,
       is_premium: premiumOnly ? "1" : "",
+      has_followup: followupOnly ? "1" : "",
+      sort: followupOnly ? "followup_asc" : "",
       stage: stageFilter,
       status: statusFilter,
       assigned_to: assignedFilter,
@@ -177,6 +186,150 @@ export default function LeadsListView({ caseStatus, premiumOnly }) {
     return c;
   }, [leads, stageOrder]);
 
+  // Leads already arrive sorted soonest-due-first (sort=followup_asc), so
+  // bucketing by calendar date preserves that order within each section.
+  const followupGroups = useMemo(() => {
+    if (!followupOnly) return null;
+    const groups = { overdue: [], today: [], upcoming: [] };
+    for (const l of leads) {
+      const g = followUpGroup(l.next_follow_up_date);
+      if (g) groups[g].push(l);
+    }
+    return groups;
+  }, [leads, followupOnly]);
+
+  function renderLeadsTable(rowLeads, emptyMessage) {
+    return (
+      <div style={{ overflowX: "auto" }}>
+        <table className="responsive-table">
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Phone</th>
+              <th>
+                <span className="header-filter-wrap">
+                  <select className="header-filter" value={sourceFilter} onChange={(e) => setSourceFilter(e.target.value)}>
+                    <option value="">Source</option>
+                    {sources.map((s) => (
+                      <option key={s} value={s}>{s}</option>
+                    ))}
+                  </select>
+                </span>
+              </th>
+              <th>
+                <span className="header-filter-wrap">
+                  <select className="header-filter" value={stageFilter} onChange={(e) => setStageFilter(e.target.value)}>
+                    <option value="">Stage</option>
+                    {stageOrder.map((s) => (
+                      <option key={s} value={s}>{labelOf(s)}</option>
+                    ))}
+                  </select>
+                </span>
+              </th>
+              <th>
+                <span className="header-filter-wrap">
+                  <select className="header-filter" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
+                    <option value="">Status</option>
+                    {statuses.map((s) => (
+                      <option key={s.key} value={s.key}>{s.label}</option>
+                    ))}
+                  </select>
+                </span>
+              </th>
+              <th>Next Follow-up</th>
+              <th>
+                {isAdmin ? (
+                  <span className="header-filter-wrap">
+                    <select className="header-filter" value={assignedFilter} onChange={(e) => setAssignedFilter(e.target.value)}>
+                      <option value="">Assigned To</option>
+                      <option value="unassigned">Unassigned</option>
+                      {executives.map((u) => (
+                        <option key={u.id} value={u.id}>{u.name}</option>
+                      ))}
+                    </select>
+                  </span>
+                ) : (
+                  "Assigned To"
+                )}
+              </th>
+              <th>
+                <span className="header-filter-wrap">
+                  <select className="header-filter" value={handlingFilter} onChange={(e) => setHandlingFilter(e.target.value)}>
+                    <option value="">Handling By</option>
+                    {executives.map((u) => (
+                      <option key={u.id} value={u.id}>{u.name}</option>
+                    ))}
+                  </select>
+                </span>
+              </th>
+              <th>Last Remark</th>
+              <th>Updated</th>
+              <th>Case</th>
+              <th>Premium</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rowLeads.map((l) => (
+              <tr key={l.id} onClick={() => navigate(`/leads/${l.id}`)} style={{ cursor: "pointer" }}>
+                <td data-label="Name">
+                  {l.is_premium ? <span title="Premium" style={{ marginRight: 4 }}>⭐</span> : null}
+                  {l.name}
+                </td>
+                <td className="nowrap" data-label="Phone">{l.phone || "-"}</td>
+                <td data-label="Source">{l.source || "-"}</td>
+                <td data-label="Stage"><StageBadge stage={l.stage} label={labelOf(l.stage)} colorIndex={colorIndexOf(l.stage)} /></td>
+                <td data-label="Status">
+                  {l.status ? (
+                    <StageBadge stage={l.status} label={statusLabelOf(l.status)} colorIndex={statusColorIndexOf(l.status)} />
+                  ) : "-"}
+                </td>
+                <td className="nowrap" data-label="Next Follow-up">
+                  <span className="followup-cell">
+                    {formatFollowUp(l.next_follow_up_date)}
+                    {l.next_follow_up_id && (
+                      <button
+                        type="button"
+                        className="secondary mark-done-btn"
+                        onClick={(e) => handleMarkFollowupDone(l.id, l.next_follow_up_id, e)}
+                      >
+                        Done
+                      </button>
+                    )}
+                  </span>
+                </td>
+                <td data-label="Assigned To">{l.assigned_to_name || "Unassigned"}</td>
+                <td data-label="Handling By">{l.handling_by_name || "-"}</td>
+                <td className="remark-cell" title={l.last_remark || ""} data-label="Last Remark">{l.last_remark || "-"}</td>
+                <td className="nowrap" data-label="Updated">{formatDateTime(l.updated_at)}</td>
+                <td data-label="Case">
+                  <button
+                    type="button"
+                    className="secondary mark-done-btn"
+                    onClick={(e) => handleToggleCase(l.id, l.case_status, e)}
+                  >
+                    {l.case_status === "closed" ? "Reopen" : "Close Case"}
+                  </button>
+                </td>
+                <td data-label="Premium">
+                  <button
+                    type="button"
+                    className="secondary mark-done-btn"
+                    onClick={(e) => handleTogglePremium(l.id, l.is_premium, e)}
+                  >
+                    {l.is_premium ? "Remove Premium" : "Mark Premium"}
+                  </button>
+                </td>
+              </tr>
+            ))}
+            {rowLeads.length === 0 && (
+              <tr><td colSpan={12} style={{ textAlign: "center", color: "#64748b" }}>{emptyMessage}</td></tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    );
+  }
+
   return (
     <div>
       <div className="stat-row">
@@ -259,134 +412,15 @@ export default function LeadsListView({ caseStatus, premiumOnly }) {
         {error && <div className="error-text">{error}</div>}
         {loading ? (
           <p>Loading...</p>
+        ) : followupOnly ? (
+          FOLLOWUP_SECTIONS.map(({ key, title }) => (
+            <div key={key} className="followup-section">
+              <h3 className="followup-section-title">{title} ({followupGroups[key].length})</h3>
+              {renderLeadsTable(followupGroups[key], `No leads ${title.toLowerCase()}`)}
+            </div>
+          ))
         ) : (
-          <div style={{ overflowX: "auto" }}>
-            <table className="responsive-table">
-              <thead>
-                <tr>
-                  <th>Name</th>
-                  <th>Phone</th>
-                  <th>
-                    <span className="header-filter-wrap">
-                      <select className="header-filter" value={sourceFilter} onChange={(e) => setSourceFilter(e.target.value)}>
-                        <option value="">Source</option>
-                        {sources.map((s) => (
-                          <option key={s} value={s}>{s}</option>
-                        ))}
-                      </select>
-                    </span>
-                  </th>
-                  <th>
-                    <span className="header-filter-wrap">
-                      <select className="header-filter" value={stageFilter} onChange={(e) => setStageFilter(e.target.value)}>
-                        <option value="">Stage</option>
-                        {stageOrder.map((s) => (
-                          <option key={s} value={s}>{labelOf(s)}</option>
-                        ))}
-                      </select>
-                    </span>
-                  </th>
-                  <th>
-                    <span className="header-filter-wrap">
-                      <select className="header-filter" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
-                        <option value="">Status</option>
-                        {statuses.map((s) => (
-                          <option key={s.key} value={s.key}>{s.label}</option>
-                        ))}
-                      </select>
-                    </span>
-                  </th>
-                  <th>Next Follow-up</th>
-                  <th>
-                    {isAdmin ? (
-                      <span className="header-filter-wrap">
-                        <select className="header-filter" value={assignedFilter} onChange={(e) => setAssignedFilter(e.target.value)}>
-                          <option value="">Assigned To</option>
-                          <option value="unassigned">Unassigned</option>
-                          {executives.map((u) => (
-                            <option key={u.id} value={u.id}>{u.name}</option>
-                          ))}
-                        </select>
-                      </span>
-                    ) : (
-                      "Assigned To"
-                    )}
-                  </th>
-                  <th>
-                    <span className="header-filter-wrap">
-                      <select className="header-filter" value={handlingFilter} onChange={(e) => setHandlingFilter(e.target.value)}>
-                        <option value="">Handling By</option>
-                        {executives.map((u) => (
-                          <option key={u.id} value={u.id}>{u.name}</option>
-                        ))}
-                      </select>
-                    </span>
-                  </th>
-                  <th>Last Remark</th>
-                  <th>Updated</th>
-                  <th>Case</th>
-                  <th>Premium</th>
-                </tr>
-              </thead>
-              <tbody>
-                {leads.map((l) => (
-                  <tr key={l.id} onClick={() => navigate(`/leads/${l.id}`)} style={{ cursor: "pointer" }}>
-                    <td data-label="Name">
-                      {l.is_premium ? <span title="Premium" style={{ marginRight: 4 }}>⭐</span> : null}
-                      {l.name}
-                    </td>
-                    <td className="nowrap" data-label="Phone">{l.phone || "-"}</td>
-                    <td data-label="Source">{l.source || "-"}</td>
-                    <td data-label="Stage"><StageBadge stage={l.stage} label={labelOf(l.stage)} colorIndex={colorIndexOf(l.stage)} /></td>
-                    <td data-label="Status">
-                      {l.status ? (
-                        <StageBadge stage={l.status} label={statusLabelOf(l.status)} colorIndex={statusColorIndexOf(l.status)} />
-                      ) : "-"}
-                    </td>
-                    <td className="nowrap" data-label="Next Follow-up">
-                      <span className="followup-cell">
-                        {formatFollowUp(l.next_follow_up_date)}
-                        {l.next_follow_up_id && (
-                          <button
-                            type="button"
-                            className="secondary mark-done-btn"
-                            onClick={(e) => handleMarkFollowupDone(l.id, l.next_follow_up_id, e)}
-                          >
-                            Done
-                          </button>
-                        )}
-                      </span>
-                    </td>
-                    <td data-label="Assigned To">{l.assigned_to_name || "Unassigned"}</td>
-                    <td data-label="Handling By">{l.handling_by_name || "-"}</td>
-                    <td className="remark-cell" title={l.last_remark || ""} data-label="Last Remark">{l.last_remark || "-"}</td>
-                    <td className="nowrap" data-label="Updated">{formatDateTime(l.updated_at)}</td>
-                    <td data-label="Case">
-                      <button
-                        type="button"
-                        className="secondary mark-done-btn"
-                        onClick={(e) => handleToggleCase(l.id, l.case_status, e)}
-                      >
-                        {l.case_status === "closed" ? "Reopen" : "Close Case"}
-                      </button>
-                    </td>
-                    <td data-label="Premium">
-                      <button
-                        type="button"
-                        className="secondary mark-done-btn"
-                        onClick={(e) => handleTogglePremium(l.id, l.is_premium, e)}
-                      >
-                        {l.is_premium ? "Remove Premium" : "Mark Premium"}
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-                {leads.length === 0 && (
-                  <tr><td colSpan={12} style={{ textAlign: "center", color: "#64748b" }}>No leads found</td></tr>
-                )}
-              </tbody>
-            </table>
-          </div>
+          renderLeadsTable(leads, "No leads found")
         )}
       </div>
     </div>

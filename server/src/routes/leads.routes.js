@@ -96,6 +96,9 @@ function buildLeadFilters(req) {
   if (is_premium) {
     clauses.push("l.is_premium = 1");
   }
+  if (req.query.has_followup) {
+    clauses.push("EXISTS (SELECT 1 FROM followups f2 WHERE f2.lead_id = l.id AND f2.status = 'pending')");
+  }
   if (assigned_to === "unassigned") {
     clauses.push("l.assigned_to IS NULL");
   } else if (assigned_to) {
@@ -126,9 +129,16 @@ function buildLeadFilters(req) {
   return { where: `WHERE ${clauses.join(" AND ")}`, params };
 }
 
-// Leads with a pending follow-up first (soonest due date on top), then leads
-// with no follow-up at all, most recently created first.
-const LEAD_ORDER = `ORDER BY (next_follow_up_date IS NULL) ASC, next_follow_up_date ASC, l.created_at DESC`;
+// Default list order is most-recently-updated first (the Dashboard's own
+// ordering). The Follow-ups tab asks for "followup_asc" instead, to sort by
+// soonest-due-first (leads with no pending follow-up wouldn't be in that list
+// anyway, since it's always paired with has_followup=1).
+function leadOrder(sort) {
+  if (sort === "followup_asc") {
+    return `ORDER BY (next_follow_up_date IS NULL) ASC, next_follow_up_date ASC, l.created_at DESC`;
+  }
+  return `ORDER BY l.updated_at DESC`;
+}
 
 // "Last remark" is the most recent entry in the remarks table — which now
 // includes an auto-generated note for every field edit and stage change, on
@@ -193,14 +203,14 @@ router.get("/sources", requireAuth, (req, res) => {
 // created, or are assigned/handling — admins see everything.
 router.get("/", requireAuth, (req, res) => {
   const { where, params } = buildLeadFilters(req);
-  const rows = db.prepare(`${LEAD_SELECT} ${where} ${LEAD_ORDER}`).all(params);
+  const rows = db.prepare(`${LEAD_SELECT} ${where} ${leadOrder(req.query.sort)}`).all(params);
   res.json({ leads: rows });
 });
 
 // Export all leads (respecting the same filters + visibility as the list view) as an .xlsx file.
 router.get("/export", requireAuth, async (req, res) => {
   const { where, params } = buildLeadFilters(req);
-  const rows = db.prepare(`${LEAD_SELECT} ${where} ${LEAD_ORDER}`).all(params);
+  const rows = db.prepare(`${LEAD_SELECT} ${where} ${leadOrder(req.query.sort)}`).all(params);
 
   const workbook = new ExcelJS.Workbook();
   const sheet = workbook.addWorksheet("Leads");
