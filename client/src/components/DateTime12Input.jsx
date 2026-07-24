@@ -14,7 +14,9 @@ export default function DateTime12Input({ value, onChange, required }) {
   const [hStr, mStr] = timePart ? timePart.split(":") : ["", ""];
   const h24 = hStr === "" ? null : parseInt(hStr, 10);
   const minute = mStr || "00";
-  const hour12 = h24 === null ? "" : h24 % 12 || 12;
+  // Default to a real "12:00 AM" reading rather than a "HH" placeholder —
+  // matches how the minute select already defaults to "00" instead of blank.
+  const hour12 = h24 === null ? 12 : h24 % 12 || 12;
   const ampm = h24 === null ? "AM" : h24 >= 12 ? "PM" : "AM";
 
   function emit(nextDate, nextHour12, nextMinute, nextAmPm) {
@@ -41,7 +43,6 @@ export default function DateTime12Input({ value, onChange, required }) {
         onChange={(e) => emit(datePart, e.target.value, minute, ampm)}
         required={required}
       >
-        <option value="" disabled>HH</option>
         {Array.from({ length: 12 }, (_, i) => i + 1).map((h) => (
           <option key={h} value={h}>{h}</option>
         ))}

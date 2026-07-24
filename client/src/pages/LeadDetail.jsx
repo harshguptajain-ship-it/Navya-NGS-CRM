@@ -456,7 +456,7 @@ function FollowupsPanel({ leadId, followups, onChange }) {
   return (
     <div>
       <form className="inline-form" onSubmit={handleAdd}>
-        <div className="field" style={{ maxWidth: 260 }}>
+        <div className="field" style={{ maxWidth: 360, minWidth: 300 }}>
           <label>Follow-up date &amp; time</label>
           <DateTime12Input value={date} onChange={setDate} required />
         </div>
