@@ -5,7 +5,7 @@ export default function PremiumLeads() {
   return (
     <div>
       <h1>Premium Leads</h1>
-      <LeadsListView premiumOnly />
+      <LeadsListView premiumOnly viewKey="premium" />
     </div>
   );
 }

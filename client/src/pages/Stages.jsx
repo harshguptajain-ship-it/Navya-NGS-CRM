@@ -91,44 +91,46 @@ function OptionListManager({ title, items, loading, reload, placeholder, helpTex
       <div className="card">
         <h2 style={{ marginTop: 0 }}>{title} ({items.length})</h2>
         <p style={{ color: "#64748b", fontSize: 13, marginTop: -8 }}>{helpText}</p>
-        <table>
-          <thead>
-            <tr>
-              <th style={{ width: 90 }}>Order</th>
-              <th>Label</th>
-              <th style={{ textAlign: "right" }}></th>
-            </tr>
-          </thead>
-          <tbody>
-            {items.map((s, i) => (
-              <tr key={s.key}>
-                <td>
-                  <button type="button" className="secondary" disabled={i === 0} onClick={() => handleMove(i, -1)} title="Move up">↑</button>{" "}
-                  <button type="button" className="secondary" disabled={i === items.length - 1} onClick={() => handleMove(i, 1)} title="Move down">↓</button>
-                </td>
-                <td>
-                  {editingKey === s.key ? (
-                    <span style={{ display: "flex", gap: 6, alignItems: "center" }}>
-                      <input value={editLabel} onChange={(e) => setEditLabel(e.target.value)} style={{ width: "auto" }} autoFocus />
-                      <button type="button" onClick={() => handleRename(s.key)}>Save</button>
-                      <button type="button" className="secondary" onClick={() => setEditingKey(null)}>Cancel</button>
-                    </span>
-                  ) : (
-                    s.label
-                  )}
-                </td>
-                <td style={{ textAlign: "right" }}>
-                  {editingKey !== s.key && (
-                    <>
-                      <button type="button" className="secondary" onClick={() => startEdit(s)}>Rename</button>{" "}
-                      <button type="button" className="danger" onClick={() => handleDelete(s.key, s.label)}>Delete</button>
-                    </>
-                  )}
-                </td>
+        <div style={{ overflowX: "auto" }}>
+          <table>
+            <thead>
+              <tr>
+                <th style={{ width: 90 }}>Order</th>
+                <th>Label</th>
+                <th style={{ textAlign: "right" }}></th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {items.map((s, i) => (
+                <tr key={s.key}>
+                  <td className="nowrap">
+                    <button type="button" className="secondary" disabled={i === 0} onClick={() => handleMove(i, -1)} title="Move up">↑</button>{" "}
+                    <button type="button" className="secondary" disabled={i === items.length - 1} onClick={() => handleMove(i, 1)} title="Move down">↓</button>
+                  </td>
+                  <td>
+                    {editingKey === s.key ? (
+                      <span style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+                        <input value={editLabel} onChange={(e) => setEditLabel(e.target.value)} style={{ width: "auto" }} autoFocus />
+                        <button type="button" onClick={() => handleRename(s.key)}>Save</button>
+                        <button type="button" className="secondary" onClick={() => setEditingKey(null)}>Cancel</button>
+                      </span>
+                    ) : (
+                      s.label
+                    )}
+                  </td>
+                  <td style={{ textAlign: "right" }} className="nowrap">
+                    {editingKey !== s.key && (
+                      <>
+                        <button type="button" className="secondary" onClick={() => startEdit(s)}>Rename</button>{" "}
+                        <button type="button" className="danger" onClick={() => handleDelete(s.key, s.label)}>Delete</button>
+                      </>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
     </>
   );

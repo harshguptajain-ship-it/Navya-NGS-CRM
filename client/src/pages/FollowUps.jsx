@@ -5,7 +5,7 @@ export default function FollowUps() {
   return (
     <div>
       <h1>Follow-ups</h1>
-      <LeadsListView followupOnly />
+      <LeadsListView followupOnly viewKey="followups" />
     </div>
   );
 }

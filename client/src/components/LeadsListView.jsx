@@ -22,32 +22,57 @@ const CREATED_PRESETS = [
   { key: "month", label: "This month" },
 ];
 
+const FILTERS_STORAGE_PREFIX = "crm_filters_";
+
+// Filters are remembered per view (dashboard/closed/premium/followups) so
+// navigating to a lead and back doesn't wipe them out — the component fully
+// unmounts on route change, so plain useState alone would reset to blank.
+function loadPersistedFilters(viewKey) {
+  if (!viewKey) return {};
+  try {
+    const raw = sessionStorage.getItem(FILTERS_STORAGE_PREFIX + viewKey);
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+}
+
 // Powers the main Dashboard (caseStatus="open"), the Closed Cases tab
 // (caseStatus="closed"), the Premium Leads tab (premiumOnly), and the
 // Follow-ups tab (followupOnly) — same filters, same table, same everything,
 // just scoped to a different slice. caseStatus, premiumOnly and followupOnly
 // are independent: e.g. a closed lead can still have a pending follow-up.
-export default function LeadsListView({ caseStatus, premiumOnly, followupOnly }) {
+export default function LeadsListView({ caseStatus, premiumOnly, followupOnly, viewKey }) {
   const navigate = useNavigate();
   const { user } = useAuth();
   const { stages, labelOf, colorIndexOf } = useStages();
   const stageOrder = useMemo(() => stages.map((s) => s.key), [stages]);
   const { statuses, labelOf: statusLabelOf, colorIndexOf: statusColorIndexOf } = useStatuses();
+  const persisted = useMemo(() => loadPersistedFilters(viewKey), [viewKey]);
   const [leads, setLeads] = useState([]);
   const [executives, setExecutives] = useState([]);
   const [sources, setSources] = useState([]);
-  const [stageFilter, setStageFilter] = useState("");
-  const [statusFilter, setStatusFilter] = useState("");
-  const [assignedFilter, setAssignedFilter] = useState("");
-  const [handlingFilter, setHandlingFilter] = useState("");
-  const [sourceFilter, setSourceFilter] = useState("");
-  const [createdFilter, setCreatedFilter] = useState("");
-  const [dateFrom, setDateFrom] = useState("");
-  const [dateTo, setDateTo] = useState("");
-  const [search, setSearch] = useState("");
+  const [stageFilter, setStageFilter] = useState(() => persisted.stageFilter || "");
+  const [statusFilter, setStatusFilter] = useState(() => persisted.statusFilter || "");
+  const [assignedFilter, setAssignedFilter] = useState(() => persisted.assignedFilter || "");
+  const [handlingFilter, setHandlingFilter] = useState(() => persisted.handlingFilter || "");
+  const [sourceFilter, setSourceFilter] = useState(() => persisted.sourceFilter || "");
+  const [createdFilter, setCreatedFilter] = useState(() => persisted.createdFilter || "");
+  const [dateFrom, setDateFrom] = useState(() => persisted.dateFrom || "");
+  const [dateTo, setDateTo] = useState(() => persisted.dateTo || "");
+  const [search, setSearch] = useState(() => persisted.search || "");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [exporting, setExporting] = useState(false);
+
+  // Keep whatever's currently selected saved for next time this view mounts.
+  useEffect(() => {
+    if (!viewKey) return;
+    sessionStorage.setItem(
+      FILTERS_STORAGE_PREFIX + viewKey,
+      JSON.stringify({ stageFilter, statusFilter, assignedFilter, handlingFilter, sourceFilter, createdFilter, dateFrom, dateTo, search })
+    );
+  }, [viewKey, stageFilter, statusFilter, assignedFilter, handlingFilter, sourceFilter, createdFilter, dateFrom, dateTo, search]);
 
   const isAdmin = user?.role === "admin";
   // None of these secondary views is where you'd start a brand-new lead —
@@ -175,6 +200,12 @@ export default function LeadsListView({ caseStatus, premiumOnly, followupOnly })
     setSearch("");
   }
 
+  // Clicking a stat box filters the table to that stage; clicking the same
+  // one again clears it back out, so it also acts as a visible "active filter" toggle.
+  function handleStatClick(stageKey) {
+    setStageFilter((prev) => (prev === stageKey ? "" : stageKey));
+  }
+
   const hasActiveFilters =
     stageFilter || statusFilter || assignedFilter || handlingFilter || sourceFilter ||
     createdFilter || dateFrom || dateTo || search;
@@ -269,11 +300,14 @@ export default function LeadsListView({ caseStatus, premiumOnly, followupOnly })
             </tr>
           </thead>
           <tbody>
-            {rowLeads.map((l) => (
+            {rowLeads.map((l, idx) => (
               <tr key={l.id} onClick={() => navigate(`/leads/${l.id}`)} style={{ cursor: "pointer" }}>
                 <td data-label="Name">
-                  {l.is_premium ? <span title="Premium" style={{ marginRight: 4 }}>⭐</span> : null}
-                  {l.name}
+                  <span className="name-cell">
+                    <span className="row-number">{idx + 1}.</span>
+                    {l.is_premium ? <span title="Premium" style={{ marginRight: 4 }}>⭐</span> : null}
+                    {l.name}
+                  </span>
                 </td>
                 <td className="nowrap" data-label="Phone">{l.phone || "-"}</td>
                 <td data-label="Source">{l.source || "-"}</td>
@@ -334,14 +368,22 @@ export default function LeadsListView({ caseStatus, premiumOnly, followupOnly })
     <div>
       <div className="stat-row">
         {stageOrder.map((s, i) => (
-          <div className="stat-box" key={s} style={{ borderTopColor: colorForIndex(i).fg }}>
+          <button
+            type="button"
+            className={`stat-box${stageFilter === s ? " active" : ""}`}
+            key={s}
+            style={{ borderTopColor: colorForIndex(i).fg }}
+            onClick={() => handleStatClick(s)}
+            title={`Filter by ${labelOf(s)}`}
+          >
             <div className="num">{counts[s]}</div>
             <div className="label">{labelOf(s)}</div>
-          </div>
+          </button>
         ))}
       </div>
 
       <div className="card">
+        <div className="results-count">{leads.length} lead{leads.length === 1 ? "" : "s"}{hasActiveFilters ? " (filtered)" : ""}</div>
         <form className="toolbar" onSubmit={handleSearchSubmit}>
           <select value={createdFilter} onChange={(e) => handlePresetChange(e.target.value)}>
             {CREATED_PRESETS.map((p) => (

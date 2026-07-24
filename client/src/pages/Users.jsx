@@ -108,59 +108,61 @@ export default function Users() {
       <div className="card">
         <h2 style={{ marginTop: 0 }}>Team</h2>
         {rowError && <div className="error-text">{rowError}</div>}
-        <table>
-          <thead>
-            <tr><th>Name</th><th>Email</th><th>Role</th><th>Since</th><th></th></tr>
-          </thead>
-          <tbody>
-            {users.map((u) => (
-              editingId === u.id ? (
-                <tr key={u.id}>
-                  <td><input value={editForm.name} onChange={(e) => updateEdit("name", e.target.value)} /></td>
-                  <td><input type="email" value={editForm.email} onChange={(e) => updateEdit("email", e.target.value)} /></td>
-                  <td>
-                    <select value={editForm.role} onChange={(e) => updateEdit("role", e.target.value)}>
-                      <option value="executive">Executive</option>
-                      <option value="admin">Admin</option>
-                    </select>
-                  </td>
-                  <td colSpan={2}>
-                    <span style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
-                      <input
-                        type="password"
-                        placeholder="New password (optional)"
-                        value={editForm.password}
-                        onChange={(e) => updateEdit("password", e.target.value)}
-                        style={{ width: 170 }}
-                      />
-                      <button type="button" onClick={() => handleSaveEdit(u.id)}>Save</button>
-                      <button type="button" className="secondary" onClick={() => setEditingId(null)}>Cancel</button>
-                    </span>
-                  </td>
-                </tr>
-              ) : (
-                <tr key={u.id}>
-                  <td>{u.name}</td>
-                  <td>{u.email}</td>
-                  <td>{u.role}</td>
-                  <td>{formatDateTime(u.created_at)}</td>
-                  <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
-                    <button type="button" className="secondary" onClick={() => startEdit(u)}>Edit</button>{" "}
-                    <button
-                      type="button"
-                      className="danger"
-                      disabled={u.id === me?.id}
-                      title={u.id === me?.id ? "You can't delete your own account" : ""}
-                      onClick={() => handleDelete(u)}
-                    >
-                      Delete
-                    </button>
-                  </td>
-                </tr>
-              )
-            ))}
-          </tbody>
-        </table>
+        <div style={{ overflowX: "auto" }}>
+          <table>
+            <thead>
+              <tr><th>Name</th><th>Email</th><th>Role</th><th>Since</th><th></th></tr>
+            </thead>
+            <tbody>
+              {users.map((u) => (
+                editingId === u.id ? (
+                  <tr key={u.id}>
+                    <td><input value={editForm.name} onChange={(e) => updateEdit("name", e.target.value)} /></td>
+                    <td><input type="email" value={editForm.email} onChange={(e) => updateEdit("email", e.target.value)} /></td>
+                    <td>
+                      <select value={editForm.role} onChange={(e) => updateEdit("role", e.target.value)}>
+                        <option value="executive">Executive</option>
+                        <option value="admin">Admin</option>
+                      </select>
+                    </td>
+                    <td colSpan={2}>
+                      <span style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+                        <input
+                          type="password"
+                          placeholder="New password (optional)"
+                          value={editForm.password}
+                          onChange={(e) => updateEdit("password", e.target.value)}
+                          style={{ width: 170 }}
+                        />
+                        <button type="button" onClick={() => handleSaveEdit(u.id)}>Save</button>
+                        <button type="button" className="secondary" onClick={() => setEditingId(null)}>Cancel</button>
+                      </span>
+                    </td>
+                  </tr>
+                ) : (
+                  <tr key={u.id}>
+                    <td>{u.name}</td>
+                    <td>{u.email}</td>
+                    <td>{u.role}</td>
+                    <td className="nowrap">{formatDateTime(u.created_at)}</td>
+                    <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
+                      <button type="button" className="secondary" onClick={() => startEdit(u)}>Edit</button>{" "}
+                      <button
+                        type="button"
+                        className="danger"
+                        disabled={u.id === me?.id}
+                        title={u.id === me?.id ? "You can't delete your own account" : ""}
+                        onClick={() => handleDelete(u)}
+                      >
+                        Delete
+                      </button>
+                    </td>
+                  </tr>
+                )
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   );

@@ -59,7 +59,7 @@ label { font-size: 13px; font-weight: 600; color: #475569; display: block; margi
   color: white;
 }
 .topbar .brand { display: flex; align-items: center; }
-.topbar nav { display: flex; gap: 16px; flex: 1; }
+.topbar nav { display: flex; gap: 8px 16px; flex: 1; flex-wrap: wrap; }
 .topbar nav a { padding: 6px 10px; border-radius: 6px; opacity: 0.85; }
 .topbar nav a.active { background: rgba(255,255,255,0.15); opacity: 1; }
 .user-box { display: flex; align-items: center; gap: 10px; font-size: 13px; }
@@ -158,9 +158,21 @@ tr:hover td { background: #f1f5f9; }
   border-top: 3px solid transparent;
   padding: 12px 16px 14px;
   box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+  /* Reset button defaults so it reads the same as the plain div it used to be */
+  text-align: left;
+  font-family: inherit;
+  color: #1b2733;
+  transition: box-shadow 0.15s, transform 0.1s;
 }
-.stat-box .num { font-size: 22px; font-weight: 700; }
+.stat-box:hover { box-shadow: 0 4px 10px rgba(0,0,0,0.12); transform: translateY(-1px); }
+.stat-box:active { transform: translateY(0); }
+.stat-box.active { box-shadow: 0 0 0 2px #2563eb, 0 4px 10px rgba(0,0,0,0.12); }
+.stat-box .num { font-size: 22px; font-weight: 700; color: #1b2733; }
 .stat-box .label { font-size: 12px; color: #64748b; margin-top: 2px; }
+
+.results-count { font-size: 13px; color: #64748b; margin-bottom: 10px; }
+.name-cell { display: inline-flex; align-items: center; }
+.row-number { color: #94a3b8; font-weight: 500; margin-right: 6px; }
 
 .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
 .form-grid .full { grid-column: 1 / -1; }
@@ -186,6 +198,12 @@ tr:hover td { background: #f1f5f9; }
 
 .inline-form { display: flex; gap: 10px; margin-bottom: 18px; flex-wrap: wrap; align-items: flex-end; }
 .inline-form .field { flex: 1; min-width: 160px; }
+
+.datetime12 { display: flex; gap: 6px; align-items: center; }
+.datetime12 input[type="date"] { width: auto; flex: 1; min-width: 0; }
+.datetime12-select { width: auto; padding: 8px 6px; min-width: 0; }
+.datetime12-colon { color: #64748b; font-weight: 600; }
+.datetime12-ampm { min-width: 62px; }
 
 @media (max-width: 768px) {
   .content { padding: 14px; }
@@ -253,4 +271,10 @@ tr:hover td { background: #f1f5f9; }
 
   .stat-row { gap: 10px; }
   .stat-box { min-width: calc(50% - 5px); flex: none; }
+
+  .inline-form { flex-direction: column; align-items: stretch; }
+  .inline-form .field { min-width: 0; }
+  .inline-form button { width: 100%; }
+  .datetime12 { flex-wrap: nowrap; }
+  .datetime12 input[type="date"] { flex: 1.4; }
 }

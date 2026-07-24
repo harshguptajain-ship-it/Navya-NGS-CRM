@@ -5,7 +5,7 @@ export default function ClosedCases() {
   return (
     <div>
       <h1>Closed Cases</h1>
-      <LeadsListView caseStatus="closed" />
+      <LeadsListView caseStatus="closed" viewKey="closed" />
     </div>
   );
 }

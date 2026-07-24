@@ -7,6 +7,7 @@ import { useStatuses } from "../hooks/useStatuses.js";
 import { formatFollowUp, formatDateTime, followUpDueState } from "../utils/followup.js";
 import { submitOnEnter } from "../utils/keyboard.js";
 import { useAuth } from "../AuthContext.jsx";
+import DateTime12Input from "../components/DateTime12Input.jsx";
 
 export default function LeadDetail() {
   const { id } = useParams();
@@ -455,9 +456,9 @@ function FollowupsPanel({ leadId, followups, onChange }) {
   return (
     <div>
       <form className="inline-form" onSubmit={handleAdd}>
-        <div className="field" style={{ maxWidth: 220 }}>
+        <div className="field" style={{ maxWidth: 260 }}>
           <label>Follow-up date &amp; time</label>
-          <input type="datetime-local" value={date} onChange={(e) => setDate(e.target.value)} required />
+          <DateTime12Input value={date} onChange={setDate} required />
         </div>
         <div className="field">
           <label>Remarks</label>
