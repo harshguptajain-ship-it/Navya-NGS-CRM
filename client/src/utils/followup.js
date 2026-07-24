@@ -10,6 +10,22 @@ export function localNowString() {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
+const pad = (n) => String(n).padStart(2, "0");
+
+// DD-MM-YYYY — the Indian date convention this CRM's team expects everywhere,
+// instead of the ISO YYYY-MM-DD / US "Jul 26, 2026" formats a browser default
+// would otherwise produce.
+function formatDMY(d) {
+  return `${pad(d.getDate())}-${pad(d.getMonth() + 1)}-${d.getFullYear()}`;
+}
+
+function format12Hour(d) {
+  let h = d.getHours();
+  const suffix = h >= 12 ? "PM" : "AM";
+  h = h % 12 || 12;
+  return `${h}:${pad(d.getMinutes())} ${suffix}`;
+}
+
 // Server-generated timestamps (created_at, updated_at, call_date, etc.) are
 // written by SQLite's datetime('now'), which is always UTC, as a bare
 // "YYYY-MM-DD HH:MM:SS" string with no timezone marker. Parsed naively that
@@ -21,26 +37,19 @@ export function formatDateTime(value) {
   const isoUtc = value.includes("T") ? value : `${value.replace(" ", "T")}Z`;
   const d = new Date(isoUtc);
   if (Number.isNaN(d.getTime())) return value;
-  const pad = (n) => String(n).padStart(2, "0");
-  let h = d.getHours();
-  const suffix = h >= 12 ? "PM" : "AM";
-  h = h % 12 || 12;
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${h}:${pad(d.getMinutes())} ${suffix}`;
+  return `${formatDMY(d)} ${format12Hour(d)}`;
 }
 
 export function formatFollowUp(value) {
   if (!value) return "-";
-  if (value.length <= 10) return value;
+  // Legacy date-only rows ("YYYY-MM-DD", no time) — reformat just the date part.
+  if (value.length <= 10) {
+    const [y, m, dd] = value.split("-");
+    return `${dd}-${m}-${y}`;
+  }
   const d = new Date(value);
   if (Number.isNaN(d.getTime())) return value;
-  return d.toLocaleString(undefined, {
-    year: "numeric",
-    month: "short",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: true,
-  });
+  return `${formatDMY(d)} ${format12Hour(d)}`;
 }
 
 // Buckets a follow-up date for the Follow-ups tab: "overdue" (any day before
