@@ -293,7 +293,6 @@ export default function LeadsListView({ caseStatus, premiumOnly, followupOnly, v
                   </select>
                 </span>
               </th>
-              <th>Last Remark</th>
               <th>Updated</th>
               <th>Case</th>
               <th>Premium</th>
@@ -317,9 +316,9 @@ export default function LeadsListView({ caseStatus, premiumOnly, followupOnly, v
                     <StageBadge stage={l.status} label={statusLabelOf(l.status)} colorIndex={statusColorIndexOf(l.status)} />
                   ) : "-"}
                 </td>
-                <td className="nowrap" data-label="Next Follow-up">
+                <td className="followup-td" data-label="Next Follow-up">
                   <span className="followup-cell">
-                    {formatFollowUp(l.next_follow_up_date)}
+                    <span className="nowrap">{formatFollowUp(l.next_follow_up_date)}</span>
                     {l.next_follow_up_id && (
                       <button
                         type="button"
@@ -333,7 +332,6 @@ export default function LeadsListView({ caseStatus, premiumOnly, followupOnly, v
                 </td>
                 <td data-label="Assigned To">{l.assigned_to_name || "Unassigned"}</td>
                 <td data-label="Handling By">{l.handling_by_name || "-"}</td>
-                <td className="remark-cell" title={l.last_remark || ""} data-label="Last Remark">{l.last_remark || "-"}</td>
                 <td className="nowrap" data-label="Updated">{formatDateTime(l.updated_at)}</td>
                 <td data-label="Case">
                   <button
@@ -356,7 +354,7 @@ export default function LeadsListView({ caseStatus, premiumOnly, followupOnly, v
               </tr>
             ))}
             {rowLeads.length === 0 && (
-              <tr><td colSpan={12} style={{ textAlign: "center", color: "#64748b" }}>{emptyMessage}</td></tr>
+              <tr><td colSpan={11} style={{ textAlign: "center", color: "#64748b" }}>{emptyMessage}</td></tr>
             )}
           </tbody>
         </table>
