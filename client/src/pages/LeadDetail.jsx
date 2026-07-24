@@ -4,7 +4,7 @@ import { api } from "../api";
 import StageBadge from "../components/StageBadge.jsx";
 import { useStages } from "../hooks/useStages.js";
 import { useStatuses } from "../hooks/useStatuses.js";
-import { formatFollowUp, followUpDueState } from "../utils/followup.js";
+import { formatFollowUp, formatDateTime, followUpDueState } from "../utils/followup.js";
 import { submitOnEnter } from "../utils/keyboard.js";
 import { useAuth } from "../AuthContext.jsx";
 
@@ -140,6 +140,25 @@ export default function LeadDetail() {
     }
   }
 
+  async function handleToggleCase() {
+    const next = lead.case_status === "closed" ? "open" : "closed";
+    try {
+      await api.updateLead(id, { case_status: next });
+      await load();
+    } catch (err) {
+      setError(err.message);
+    }
+  }
+
+  async function handleTogglePremium() {
+    try {
+      await api.updateLead(id, { is_premium: !lead.is_premium });
+      await load();
+    } catch (err) {
+      setError(err.message);
+    }
+  }
+
   if (loading) return <p>Loading...</p>;
   if (!lead) return <p>Lead not found.</p>;
 
@@ -151,7 +170,7 @@ export default function LeadDetail() {
         ) : (
           <div className="lead-header">
             <div>
-              <h1>{lead.name}</h1>
+              <h1>{lead.is_premium ? <span title="Premium">⭐ </span> : null}{lead.name}</h1>
               <div className="meta-line">{lead.phone || "no phone"} · {lead.email || "no email"}</div>
               <div className="meta-line">{lead.address}</div>
               <div className="meta-line">Source: {lead.source || "-"}</div>
@@ -196,13 +215,27 @@ export default function LeadDetail() {
                   </select>
                 </span>
               </div>
-              <div className="meta-line">Created {lead.created_at} by {lead.created_by_name || "-"} · Last updated {lead.updated_at}</div>
+              <div className="meta-line">Created {formatDateTime(lead.created_at)} by {lead.created_by_name || "-"} · Last updated {formatDateTime(lead.updated_at)}</div>
             </div>
             <div style={{ textAlign: "right" }}>
-              <StageBadge stage={lead.stage} label={labelOf(lead.stage)} colorIndex={colorIndexOf(lead.stage)} />
-              <div className="meta-line">since {lead.stage_updated_at}</div>
-              <div style={{ display: "flex", gap: 8, marginTop: 8, justifyContent: "flex-end" }}>
+              <div>
+                <StageBadge stage={lead.stage} label={labelOf(lead.stage)} colorIndex={colorIndexOf(lead.stage)} />
+                {lead.case_status === "closed" && (
+                  <span className="badge" style={{ background: "#e2e8f0", color: "#334155", marginLeft: 6 }}>Closed</span>
+                )}
+                {Boolean(lead.is_premium) && (
+                  <span className="badge" style={{ background: "#fef9c3", color: "#854d0e", marginLeft: 6 }}>⭐ Premium</span>
+                )}
+              </div>
+              <div className="meta-line">since {formatDateTime(lead.stage_updated_at)}</div>
+              <div style={{ display: "flex", gap: 8, marginTop: 8, justifyContent: "flex-end", flexWrap: "wrap" }}>
                 <button className="secondary" onClick={() => setEditing(true)}>Edit Details</button>
+                <button className="secondary" onClick={handleToggleCase}>
+                  {lead.case_status === "closed" ? "Reopen Case" : "Close Case"}
+                </button>
+                <button className="secondary" onClick={handleTogglePremium}>
+                  {lead.is_premium ? "Remove Premium" : "Mark Premium"}
+                </button>
                 {user?.role === "admin" && (
                   <button className="danger" onClick={handleDeleteLead}>Delete Lead</button>
                 )}
@@ -380,7 +413,7 @@ function AllNotesPanel({ notes }) {
       {notes.map((n) => (
         <div className="list-item" key={n.id}>
           <div className="top-row">
-            <span><strong>{n.type}</strong> · {n.ts}</span>
+            <span><strong>{n.type}</strong> · {formatDateTime(n.ts)}</span>
             <span>{n.by}</span>
           </div>
           <div className="body-text">{n.text}</div>
@@ -503,7 +536,7 @@ function CallsPanel({ leadId, calls, onChange }) {
       {calls.map((c) => (
         <div className="list-item" key={c.id}>
           <div className="top-row">
-            <span>{c.call_date}</span>
+            <span>{formatDateTime(c.call_date)}</span>
             <span>{c.executive_name}</span>
           </div>
           <div className="body-text">{c.customer_response}</div>
@@ -589,7 +622,7 @@ function RemarksPanel({ leadId, remarks, onChange, isAdmin }) {
       {remarks.map((r) => (
         <div className="list-item" key={r.id}>
           <div className="top-row">
-            <span>{r.created_at}</span>
+            <span>{formatDateTime(r.created_at)}</span>
             <span>{r.created_by_name}</span>
           </div>
           {editingId === r.id ? (
@@ -701,7 +734,7 @@ function AdminNotesPanel({ leadId, notes, onChange }) {
       {notes.map((n) => (
         <div className="list-item" key={n.id}>
           <div className="top-row">
-            <span>{n.created_at}</span>
+            <span>{formatDateTime(n.created_at)}</span>
             <span>{n.created_by_name}</span>
           </div>
           {editingId === n.id ? (
@@ -739,7 +772,7 @@ function HistoryPanel({ history, labelOf }) {
       {history.map((h) => (
         <div className="list-item" key={h.id}>
           <div className="top-row">
-            <span>{h.changed_at}</span>
+            <span>{formatDateTime(h.changed_at)}</span>
             <span>{h.changed_by_name}</span>
           </div>
           <div className="body-text">

@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { api } from "../api";
 import { useAuth } from "../AuthContext.jsx";
+import { formatDateTime } from "../utils/followup.js";
 
 export default function Users() {
   const { user: me } = useAuth();
@@ -142,7 +143,7 @@ export default function Users() {
                   <td>{u.name}</td>
                   <td>{u.email}</td>
                   <td>{u.role}</td>
-                  <td>{u.created_at}</td>
+                  <td>{formatDateTime(u.created_at)}</td>
                   <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
                     <button type="button" className="secondary" onClick={() => startEdit(u)}>Edit</button>{" "}
                     <button

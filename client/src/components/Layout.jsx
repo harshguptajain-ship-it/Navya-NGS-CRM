@@ -19,6 +19,8 @@ export default function Layout({ children }) {
         <nav>
           <NavLink to="/" end>Dashboard</NavLink>
           <NavLink to="/leads/new">New Lead</NavLink>
+          <NavLink to="/closed-cases">Closed Cases</NavLink>
+          <NavLink to="/premium-leads">Premium Leads</NavLink>
           {user?.role === "admin" && <NavLink to="/users">Executives</NavLink>}
           {user?.role === "admin" && <NavLink to="/stages">Stages &amp; Status</NavLink>}
         </nav>

@@ -32,6 +32,8 @@ CREATE TABLE IF NOT EXISTS leads (
   stage TEXT NOT NULL DEFAULT 'new',
   stage_updated_at TEXT NOT NULL DEFAULT (datetime('now')),
   status TEXT,
+  case_status TEXT NOT NULL DEFAULT 'open', -- 'open' | 'closed'
+  is_premium INTEGER NOT NULL DEFAULT 0,
   assigned_to INTEGER REFERENCES users(id),
   created_by INTEGER REFERENCES users(id),
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
@@ -126,7 +128,15 @@ if (!leadColumns.includes("handling_by")) {
 if (!leadColumns.includes("status")) {
   db.exec("ALTER TABLE leads ADD COLUMN status TEXT");
 }
+if (!leadColumns.includes("case_status")) {
+  db.exec("ALTER TABLE leads ADD COLUMN case_status TEXT NOT NULL DEFAULT 'open'");
+}
+if (!leadColumns.includes("is_premium")) {
+  db.exec("ALTER TABLE leads ADD COLUMN is_premium INTEGER NOT NULL DEFAULT 0");
+}
 db.exec("CREATE INDEX IF NOT EXISTS idx_leads_status ON leads(status)");
+db.exec("CREATE INDEX IF NOT EXISTS idx_leads_case_status ON leads(case_status)");
+db.exec("CREATE INDEX IF NOT EXISTS idx_leads_is_premium ON leads(is_premium)");
 
 // Seed the stages table from the original hardcoded lifecycle, once, so
 // existing deployments keep the same stages/order they already had.

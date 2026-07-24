@@ -10,11 +10,19 @@ export function localNowString() {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
-// Trims the seconds off a raw "YYYY-MM-DD HH:MM:SS" timestamp (e.g. leads.updated_at)
-// for a more compact display — doesn't reinterpret the timezone it was stored in.
+// Reformats the time portion of a raw "YYYY-MM-DD HH:MM:SS" (or "...THH:MM")
+// timestamp to 12-hour AM/PM — doesn't reinterpret the timezone it was stored
+// in, just changes how the same wall-clock time is displayed.
 export function formatDateTime(value) {
   if (!value) return "-";
-  return value.length > 16 ? value.slice(0, 16) : value;
+  const [datePart, rawTime] = value.replace("T", " ").split(" ");
+  if (!rawTime) return datePart;
+  const [hStr, mStr] = rawTime.split(":");
+  let h = parseInt(hStr, 10);
+  if (Number.isNaN(h)) return value;
+  const suffix = h >= 12 ? "PM" : "AM";
+  h = h % 12 || 12;
+  return `${datePart} ${h}:${mStr} ${suffix}`;
 }
 
 export function formatFollowUp(value) {
@@ -28,6 +36,7 @@ export function formatFollowUp(value) {
     day: "2-digit",
     hour: "2-digit",
     minute: "2-digit",
+    hour12: true,
   });
 }
 

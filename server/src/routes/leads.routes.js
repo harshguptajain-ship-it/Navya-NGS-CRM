@@ -55,6 +55,13 @@ function describeLeadChanges(existing, resolved) {
   if (String(existing.handling_by || "") !== String(resolved.handling_by || "")) {
     lines.push(`Handling By changed from "${userName(existing.handling_by) || "-"}" to "${userName(resolved.handling_by) || "-"}"`);
   }
+  if (String(existing.case_status || "open") !== String(resolved.case_status || "open")) {
+    const cap = (v) => v.charAt(0).toUpperCase() + v.slice(1);
+    lines.push(`Case changed from "${cap(existing.case_status || "open")}" to "${cap(resolved.case_status || "open")}"`);
+  }
+  if (Number(existing.is_premium ? 1 : 0) !== Number(resolved.is_premium ? 1 : 0)) {
+    lines.push(`Premium changed from "${existing.is_premium ? "Yes" : "No"}" to "${resolved.is_premium ? "Yes" : "No"}"`);
+  }
 
   return lines.join("\n");
 }
@@ -69,7 +76,7 @@ function addRemark(leadId, text, userId) {
 // converts its local-time date range to UTC before sending, to match how
 // created_at is stored).
 function buildLeadFilters(req) {
-  const { stage, status, assigned_to, handling_by, source, q, created_from, created_to } = req.query;
+  const { stage, status, case_status, is_premium, assigned_to, handling_by, source, q, created_from, created_to } = req.query;
   const vis = visibilityFilter(req.user);
   const clauses = [vis.clause];
   const params = { ...vis.params };
@@ -81,6 +88,13 @@ function buildLeadFilters(req) {
   if (status) {
     clauses.push("l.status = @status");
     params.status = status;
+  }
+  if (case_status) {
+    clauses.push("l.case_status = @case_status");
+    params.case_status = case_status;
+  }
+  if (is_premium) {
+    clauses.push("l.is_premium = 1");
   }
   if (assigned_to === "unassigned") {
     clauses.push("l.assigned_to IS NULL");
@@ -200,6 +214,8 @@ router.get("/export", requireAuth, async (req, res) => {
     { header: "Stage", key: "stage_label", width: 26 },
     { header: "Stage Updated At", key: "stage_updated_at", width: 20 },
     { header: "Status", key: "status_label", width: 18 },
+    { header: "Case", key: "case_status_label", width: 12 },
+    { header: "Premium", key: "premium_label", width: 12 },
     { header: "Assigned To", key: "assigned_to_name", width: 18 },
     { header: "Handling By", key: "handling_by_name", width: 18 },
     { header: "Next Follow-up", key: "next_follow_up_date", width: 16 },
@@ -210,7 +226,7 @@ router.get("/export", requireAuth, async (req, res) => {
     { header: "Updated At", key: "updated_at", width: 20 },
   ];
   sheet.getRow(1).font = { bold: true };
-  sheet.autoFilter = { from: "A1", to: "Q1" };
+  sheet.autoFilter = { from: "A1", to: "S1" };
 
   const labels = stageLabels();
   const statLabels = statusLabels();
@@ -219,6 +235,8 @@ router.get("/export", requireAuth, async (req, res) => {
       ...r,
       stage_label: labels[r.stage] || r.stage,
       status_label: r.status ? statLabels[r.status] || r.status : "",
+      case_status_label: r.case_status === "closed" ? "Closed" : "Open",
+      premium_label: r.is_premium ? "Yes" : "No",
     });
   }
 
@@ -347,11 +365,14 @@ router.put("/:id", requireAuth, requireLeadAccess("id"), (req, res) => {
   const existing = db.prepare("SELECT * FROM leads WHERE id = ?").get(req.params.id);
   if (!existing) return res.status(404).json({ error: "Lead not found" });
 
-  const { name, phone, email, address, source, notes, status, assigned_to, handling_by } = req.body;
+  const { name, phone, email, address, source, notes, status, assigned_to, handling_by, case_status, is_premium } = req.body;
   const nextPhone = phone ?? existing.phone;
 
   if (status !== undefined && status && !isValidStatus(status)) {
     return res.status(400).json({ error: "Invalid status value" });
+  }
+  if (case_status !== undefined && case_status !== "open" && case_status !== "closed") {
+    return res.status(400).json({ error: "Invalid case status value" });
   }
 
   // Executives can hand a lead up to an admin (or unassign it) but not sideways
@@ -387,6 +408,8 @@ router.put("/:id", requireAuth, requireLeadAccess("id"), (req, res) => {
     status: normalizeId(status, existing.status),
     assigned_to: normalizeId(assigned_to, existing.assigned_to),
     handling_by: normalizeId(handling_by, existing.handling_by),
+    case_status: case_status ?? existing.case_status,
+    is_premium: is_premium === undefined ? existing.is_premium : (is_premium ? 1 : 0),
   };
 
   try {
@@ -394,8 +417,8 @@ router.put("/:id", requireAuth, requireLeadAccess("id"), (req, res) => {
       `UPDATE leads SET
         name = @name, phone = @phone, email = @email, address = @address,
         source = @source, notes = @notes, status = @status,
-        assigned_to = @assigned_to, handling_by = @handling_by,
-        updated_at = datetime('now')
+        assigned_to = @assigned_to, handling_by = @handling_by, case_status = @case_status,
+        is_premium = @is_premium, updated_at = datetime('now')
        WHERE id = @id`
     ).run(resolved);
   } catch (err) {

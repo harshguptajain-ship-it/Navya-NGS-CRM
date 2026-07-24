@@ -8,6 +8,8 @@ import NewLead from "./pages/NewLead.jsx";
 import LeadDetail from "./pages/LeadDetail.jsx";
 import Users from "./pages/Users.jsx";
 import Stages from "./pages/Stages.jsx";
+import ClosedCases from "./pages/ClosedCases.jsx";
+import PremiumLeads from "./pages/PremiumLeads.jsx";
 
 function Protected({ children }) {
   const { user, loading } = useAuth();
@@ -23,6 +25,8 @@ export default function App() {
       <Route path="/" element={<Protected><Dashboard /></Protected>} />
       <Route path="/leads/new" element={<Protected><NewLead /></Protected>} />
       <Route path="/leads/:id" element={<Protected><LeadDetail /></Protected>} />
+      <Route path="/closed-cases" element={<Protected><ClosedCases /></Protected>} />
+      <Route path="/premium-leads" element={<Protected><PremiumLeads /></Protected>} />
       <Route path="/users" element={<Protected><Users /></Protected>} />
       <Route path="/stages" element={<Protected><Stages /></Protected>} />
       <Route path="*" element={<Navigate to="/" replace />} />
